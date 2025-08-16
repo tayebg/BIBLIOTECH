@@ -53,7 +53,7 @@ Library System is a professional library management solution that provides admin
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone <github.com/tayebg/BIBLIOTECH>
 cd library-system
 ```
 
