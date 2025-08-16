@@ -75,6 +75,12 @@ npm run dev
 
 5. Open your browser and navigate to `http://localhost:5173`
 
+## 📸 Screenshots
+
+   ![Screenshots 1](screenshots/1.png)
+   ![Screenshots 2](screenshots/2.png)
+   ![Screenshots 3](screenshots/3.png)
+
 ## 🚀 Usage
 
 ### Getting Started
