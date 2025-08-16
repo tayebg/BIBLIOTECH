@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* BiblioTech Design System - Professional Library Management */
+
+@layer base {
+  :root {
+    /* BiblioTech Dark Theme */
+    --background: 219 43% 11%;
+    --foreground: 0 0% 100%;
+
+    /* Cards and containers */
+    --card: 0 0% 100%;
+    --card-foreground: 219 43% 11%;
+
+    /* Navigation and primary elements */
+    --primary: 219 43% 11%;
+    --primary-foreground: 0 0% 100%;
+
+    /* BiblioTech blue buttons and accents */
+    --secondary: 225 20% 70%;
+    --secondary-foreground: 219 43% 11%;
+
+    /* Input fields - light blue/gray */
+    --input-bg: 225 30% 85%;
+    --input-foreground: 219 43% 11%;
+
+    /* Action buttons - deeper blue */
+    --action: 225 50% 60%;
+    --action-foreground: 0 0% 100%;
+
+    /* Destructive actions */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders and accents */
+    --border: 225 20% 80%;
+    --ring: 225 50% 60%;
+
+    /* Hover states */
+    --hover: 225 30% 75%;
+    --accent-hover: 225 60% 55%;
+
+    /* Dropdown/Popover components */
+    --popover: 0 0% 100%;
+    --popover-foreground: 219 43% 11%;
+    --muted: 225 20% 90%;
+    --muted-foreground: 219 25% 35%;
+    --accent: 225 30% 85%;
+    --accent-foreground: 219 43% 11%;
+
+    --radius: 1rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
