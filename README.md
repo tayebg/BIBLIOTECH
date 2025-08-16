@@ -77,9 +77,9 @@ npm run dev
 
 ## 📸 Screenshots
 
-*   ![Screenshots 1](screenshots/1.png)
-*   ![Screenshots 2](screenshots/2.png)
-*   ![Screenshots 3](screenshots/3.png)
+   ![Screenshots 1](screenshots/1.png)
+   ![Screenshots 2](screenshots/2.png)
+   ![Screenshots 3](screenshots/3.png)
 
 ### Dashboard Overview
 ![Dashboard](./public/screenshots/dashboard.png)
