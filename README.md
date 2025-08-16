@@ -75,21 +75,6 @@ npm run dev
 
 5. Open your browser and navigate to `http://localhost:5173`
 
-## 📸 Screenshots
-
-   ![Screenshots 1](screenshots/1.png)
-   ![Screenshots 2](screenshots/2.png)
-   ![Screenshots 3](screenshots/3.png)
-
-### Dashboard Overview
-![Dashboard](./public/screenshots/dashboard.png)
-
-### Books Management
-![Books Management](./public/screenshots/books-management.png)
-
-### Authors Management  
-![Authors Management](./public/screenshots/authors-management.png)
-
 ## 🚀 Usage
 
 ### Getting Started
