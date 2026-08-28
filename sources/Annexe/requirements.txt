@@ -1,6 +1,4 @@
-tk
-customtkinter==5.1.2
-Pillow
-isbnlib
-datetime
-smartcard
+﻿customtkinter>=5.1.2
+Pillow>=9.5.0
+isbnlib>=3.10.14
+setuptools>=65.0.0

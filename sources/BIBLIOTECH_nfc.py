@@ -1,29 +1,30 @@
+# -*- coding: utf-8 -*-
 """
-Bienvenue sur le programme du projet BIBLIOTECH
-
-Cette version est la version NFC du logiciel, elle est la version principale cependant elle nécessite le lecteur NFC pour fonctionner et pour améliorer le confort d'utilisation la douchette permettant de lire les codes barres pour ne pas à avoir à recopier tout les isbn à la main mais elle n'est pas nécessaire au fonctionnement du programme
-
-L'essentiel pour s'y retrouver dans se programme est de suivre le nom des élements, pour les élements lié au TKinter/custontkinter la chartres est la suivante:
-
--LabelSimple,LabelDouble,LabelQuintuple,LabelDeca,... sont des labels permettant de gérer l'affichage du rectangle au coin arrondie blanc situé a l'arrière des élements (derrières le menu de séléction d'onglet, derrière la liste de livre,...)
--LabelEspace_(avec un code) sont des Labels invisibles permettant de gérer des espaces lorsqu'il n'y a rien à afficher dans cette collonnes/lignes, les codes sont composé de la page (par example pour ListeAdherent le code commencera par LA) puis du numéro du labelespace(le premier sera donc 0)
--LabelTitre sont des labels gérant l'affichage des titres (que se soit celui tout en haut à gauche ou des éléments majeurs dans l'onglets)
-Pour le reste des eléments lié a tkinter/customtkinter le nom est transparent, le BttonRecherche est le boutton permettant de lancer la recherche, l'EntryNom est l'entry dans laquelle on y rentrera le nom de l'adherent,les objets dont le nom commence par Image sont des Imzge utilisé pour l'affichage de logo ou autre,ect...
-
-Pour ce qui en est des autres variables les pincipales sont:
-celles commencant par Outfit sont les polices d'écriture utilisées
-today_date est la date du jour
-curseur est un cursor de la bibliotèque sqlite3
-page est une variable str permettant de savoir sur quelle onglet on est situé et dans certaine fonction elle est utilisé afin de savoir quoi afficher
-Liste_Adherent,Liste_Emprunt,Liste_Livre sont les listes composées de tout les éléments de la base de donnes respectivement adherent,emprunt,livre
-Liste_affiché est une liste contenant tout les éléments de la base de données affiché (par exemple les 10 premiers adherent si on est a la page 1 de la liste d'adherent)
-
-Le reste des variables sont des variables moins importants/moins utilisé, leurs utilité sera soit expliqué lors de leurs utilisation
+=============================================================================
+ BIBLIOTECH - Contactless Library Management System (NFC Hardware Version)
+ 
+ Author: Tayeb Bekkouche (@tayebg)
+ Repository: https://github.com/tayebg/BIBLIOTECH
+ Contact: tayebekk2004@gmail.com
+ 
+ Description:
+ NFC-enabled version for RFID/NFC card readers and barcode scanners.
+ Built with Python, CustomTkinter, SQLite3, NFC reader, and isbnlib.
+=============================================================================
 """
+
+import os
+import sys
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(BASE_DIR, "nfc"))
+DB_PATH = os.path.join(BASE_DIR, "bibliotheque_nfc.db")
+ANNEXE_DIR = os.path.join(BASE_DIR, "Annexe")
+ICONES_DIR = os.path.join(ANNEXE_DIR, "icones")
 
 ### importation des librairies utilisée
 import sys
-sys.path.append("/nfc/")
+
 import nfc
 from tkinter import *
 from customtkinter import *
@@ -42,7 +43,7 @@ Outfit = ('Outfit', 10)
 OutfitPlus = ('Outfit',15)
 OutfitBold = ('Outfit', 15,"bold")
 OutfitTitle = ('Outfit', 30,"bold")
-connexion = connect('bibliotheque_nfc.db')
+connexion = connect(DB_PATH)
 today_date = date.today()
 td = timedelta(30)
 curseur = connexion.cursor()
@@ -307,10 +308,10 @@ def affichage_liste_emprunts():
 
 global Liste_Livre_Affiche
 Liste_Affiche = []
-Image_Poubelle = CTkImage(Image.open("Annexe\icones\Delete.png"),size=(15,15))
-Image_Next_Page = CTkImage(Image.open("Annexe\icones\circle_right.png"),size=(15,15))
-Image_Previous_Page = CTkImage(Image.open("Annexe\icones\circle_left.png"),size=(15,15))
-Image_Retard = CTkImage(Image.open("Annexe\icones\Retard.png"),size=(15,15))
+Image_Poubelle = CTkImage(Image.open(os.path.join(ICONES_DIR, "Delete.png")),size=(15,15))
+Image_Next_Page = CTkImage(Image.open(os.path.join(ICONES_DIR, "circle_right.png")),size=(15,15))
+Image_Previous_Page = CTkImage(Image.open(os.path.join(ICONES_DIR, "circle_left.png")),size=(15,15))
+Image_Retard = CTkImage(Image.open(os.path.join(ICONES_DIR, "Retard.png")),size=(15,15))
 global num_liste_affiche
 global num_liste_max
 num_liste_affiche=1
