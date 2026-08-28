@@ -9,7 +9,7 @@
  
  Description:
  A modern, contactless library management application built with Python, 
- CustomTkinter, SQLite3, and bibliographic lookup (isbnlib).
+ CustomTkinter, Database Layer (PostgreSQL & SQLite), and bibliographic lookup (isbnlib).
 =============================================================================
 """
 
@@ -26,19 +26,22 @@ from customtkinter import (
     CTkToplevel,
 )
 from PIL import Image
-from sqlite3 import connect
 from isbnlib import meta
 
 # --- Path & Resource Resolution ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "bibliotheque.db")
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+from db import get_db
+
 ANNEXE_DIR = os.path.join(BASE_DIR, "Annexe")
 ICONES_DIR = os.path.join(ANNEXE_DIR, "icones")
 
 # --- Application Initialization ---
 root = Tk()
 root.geometry("1080x890")
-root.title("BIBLIOTECH - Gestion de Bibliotheque")
+root.title("BIBLIOTECH - Library Management")
 root.configure(bg="#0A1437")
 root.resizable(False, False)
 
@@ -48,9 +51,8 @@ OutfitPlus = ("Outfit", 15)
 OutfitBold = ("Outfit", 15, "bold")
 OutfitTitle = ("Outfit", 30, "bold")
 
-# Database Connection
-connexion = connect(DB_PATH)
-curseur = connexion.cursor()
+# Database Connection (PostgreSQL with SQLite fallback)
+db = get_db()
 
 # State Variables
 today_date = date.today()
@@ -65,7 +67,7 @@ num_liste_max = 1
 page = "livre"
 root_annexe = None
 
-# Entry Widget References
+# Entry References
 EntryNom = None
 EntryPrenom = None
 EntryMail = None
@@ -330,24 +332,21 @@ def refresh_current_tab():
 def ChangementAdherent():
     global page, Liste_Adherent, num_liste_affiche
     page = "adherent"
-    curseur.execute("SELECT * FROM adherent")
-    Liste_Adherent = curseur.fetchall()
+    Liste_Adherent = db.fetchall("SELECT * FROM adherent")
     num_liste_affiche = 1
     update_page_view(Liste_Adherent, affichage_liste_adherent)
 
 def ChangementLivre():
     global page, Liste_Livre, num_liste_affiche
     page = "livre"
-    curseur.execute("SELECT * FROM livre")
-    Liste_Livre = curseur.fetchall()
+    Liste_Livre = db.fetchall("SELECT * FROM livre")
     num_liste_affiche = 1
     update_page_view(Liste_Livre, affichage_liste_livre)
 
 def ChangementEmprunts():
     global page, Liste_Emprunt, num_liste_affiche
     page = "emprunt"
-    curseur.execute("SELECT * FROM emprunt")
-    Liste_Emprunt = curseur.fetchall()
+    Liste_Emprunt = db.fetchall("SELECT * FROM emprunt")
     num_liste_affiche = 1
     update_page_view(Liste_Emprunt, affichage_liste_emprunts)
 
@@ -357,21 +356,21 @@ def delete(row, page_affiche):
     idx = (page_affiche - 1) * 10 + row
     if page == "adherent" and idx < len(Liste_Adherent):
         identifiant = Liste_Adherent[idx][0]
-        curseur.execute("DELETE FROM adherent WHERE identifiant=?", (identifiant,))
-        connexion.commit()
+        db.execute("DELETE FROM adherent WHERE identifiant=?", (identifiant,))
+        db.commit()
         Liste_Adherent.pop(idx)
         update_page_view(Liste_Adherent, affichage_liste_adherent)
     elif page == "livre" and idx < len(Liste_Livre):
         idlivre = Liste_Livre[idx][4]
-        curseur.execute("DELETE FROM livre WHERE idlivre=?", (idlivre,))
-        connexion.commit()
+        db.execute("DELETE FROM livre WHERE idlivre=?", (idlivre,))
+        db.commit()
         Liste_Livre.pop(idx)
         update_page_view(Liste_Livre, affichage_liste_livre)
     elif page in ("emprunt", "retard") and idx < len(Liste_Emprunt):
         num_livre = Liste_Emprunt[idx][0]
         identifiant = Liste_Emprunt[idx][5]
-        curseur.execute("DELETE FROM emprunt WHERE NumLivre=? AND Identifiant=?", (num_livre, identifiant))
-        connexion.commit()
+        db.execute("DELETE FROM emprunt WHERE NumLivre=? AND Identifiant=?", (num_livre, identifiant))
+        db.commit()
         Liste_Emprunt.pop(idx)
         update_page_view(Liste_Emprunt, affichage_liste_emprunts)
 
@@ -379,20 +378,16 @@ def sortby(column, table):
     global Liste_Livre, Liste_Adherent, Liste_Emprunt, num_liste_affiche
     num_liste_affiche = 1
     if table == "livre":
-        curseur.execute(f"SELECT * FROM livre ORDER BY {column} COLLATE NOCASE ASC")
-        Liste_Livre = curseur.fetchall()
+        Liste_Livre = db.fetchall(f"SELECT * FROM livre ORDER BY {column} COLLATE NOCASE ASC")
         update_page_view(Liste_Livre, affichage_liste_livre)
     elif table == "adherent":
-        curseur.execute(f"SELECT * FROM adherent ORDER BY {column} COLLATE NOCASE ASC")
-        Liste_Adherent = curseur.fetchall()
+        Liste_Adherent = db.fetchall(f"SELECT * FROM adherent ORDER BY {column} COLLATE NOCASE ASC")
         update_page_view(Liste_Adherent, affichage_liste_adherent)
     elif table == "retard":
-        curseur.execute(f"SELECT * FROM emprunt WHERE DATE(DateRetour) < DATE('now') ORDER BY {column} COLLATE NOCASE ASC")
-        Liste_Emprunt = curseur.fetchall()
+        Liste_Emprunt = db.fetchall(f"SELECT * FROM emprunt WHERE DATE(DateRetour) < CURRENT_DATE ORDER BY {column} COLLATE NOCASE ASC")
         update_page_view(Liste_Emprunt, affichage_liste_emprunts)
     else:
-        curseur.execute(f"SELECT * FROM emprunt ORDER BY {column} COLLATE NOCASE ASC")
-        Liste_Emprunt = curseur.fetchall()
+        Liste_Emprunt = db.fetchall(f"SELECT * FROM emprunt ORDER BY {column} COLLATE NOCASE ASC")
         update_page_view(Liste_Emprunt, affichage_liste_emprunts)
 
 def Ajouter_Livre():
@@ -428,10 +423,8 @@ def Emprunt():
     if not id_livre_input or not id_adh_input:
         return
     
-    curseur.execute("SELECT * FROM livre WHERE isbn=? OR idlivre=?", (id_livre_input, id_livre_input))
-    data_livre = curseur.fetchone()
-    curseur.execute("SELECT * FROM adherent WHERE identifiant=?", (id_adh_input,))
-    data_adherent = curseur.fetchone()
+    data_livre = db.fetchone("SELECT * FROM livre WHERE isbn=? OR CAST(idlivre AS TEXT)=?", (id_livre_input, id_livre_input))
+    data_adherent = db.fetchone("SELECT * FROM adherent WHERE CAST(identifiant AS TEXT)=?", (id_adh_input,))
     
     if not data_livre or not data_adherent:
         return
@@ -446,13 +439,13 @@ def Emprunt():
     auteurs = str(data_livre[2])
     
     try:
-        curseur.execute("INSERT INTO emprunt(NumLivre, NomLivre, DateEmprunt, DateRetour, Identifiant, NomAdherent, PrenomAdherent, Auteur) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (num_livre, nom_livre, date_emp, date_ret, id_adh, nom_adh, prenom_adh, auteurs))
-        connexion.commit()
+        db.execute("INSERT INTO emprunt(NumLivre, NomLivre, DateEmprunt, DateRetour, Identifiant, NomAdherent, PrenomAdherent, Auteur) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                   (num_livre, nom_livre, date_emp, date_ret, id_adh, nom_adh, prenom_adh, auteurs))
+        db.commit()
     except Exception as e:
         print(f"Erreur lors de l'emprunt: {e}")
     
-    curseur.execute("SELECT * FROM emprunt")
-    Liste_Emprunt = curseur.fetchall()
+    Liste_Emprunt = db.fetchall("SELECT * FROM emprunt")
     update_page_view(Liste_Emprunt, affichage_liste_emprunts)
 
 def Retour():
@@ -462,25 +455,23 @@ def Retour():
     if not id_livre_input or not id_adh_input:
         return
     
-    curseur.execute("SELECT * FROM livre WHERE isbn=? OR idlivre=?", (id_livre_input, id_livre_input))
-    data_livre = curseur.fetchone()
+    data_livre = db.fetchone("SELECT * FROM livre WHERE isbn=? OR CAST(idlivre AS TEXT)=?", (id_livre_input, id_livre_input))
     if not data_livre:
         return
     
     num_livre = str(data_livre[4])
-    curseur.execute("DELETE FROM emprunt WHERE NumLivre=? AND Identifiant=?", (num_livre, id_adh_input))
-    connexion.commit()
+    db.execute("DELETE FROM emprunt WHERE NumLivre=? AND CAST(Identifiant AS TEXT)=?", (num_livre, id_adh_input))
+    db.commit()
     
-    curseur.execute("SELECT * FROM emprunt")
-    Liste_Emprunt = curseur.fetchall()
+    Liste_Emprunt = db.fetchall("SELECT * FROM emprunt")
     update_page_view(Liste_Emprunt, affichage_liste_emprunts)
 
 def RechercherAdherent():
     global Liste_Adherent
     term = EntryRechercheAdherent.get().strip() if EntryRechercheAdherent else ""
     param = f"%{term}%"
-    curseur.execute("SELECT * FROM adherent WHERE nomAdherent LIKE ? OR prenomAdherent LIKE ? OR Mail LIKE ? OR telephone LIKE ? OR identifiant LIKE ?", (param, param, param, param, param))
-    res = curseur.fetchall()
+    res = db.fetchall("SELECT * FROM adherent WHERE nomAdherent LIKE ? OR prenomAdherent LIKE ? OR Mail LIKE ? OR telephone LIKE ? OR CAST(identifiant AS TEXT) LIKE ?",
+                      (param, param, param, param, param))
     Liste_Adherent = res if res else []
     update_page_view(Liste_Adherent, affichage_liste_adherent)
 
@@ -488,8 +479,8 @@ def RechercherLivre():
     global Liste_Livre
     term = EntryRechercheLivre.get().strip() if EntryRechercheLivre else ""
     param = f"%{term}%"
-    curseur.execute("SELECT * FROM livre WHERE isbn LIKE ? OR titre LIKE ? OR auteur LIKE ? OR idlivre LIKE ? OR editeur LIKE ? OR categorie LIKE ?", (param, param, param, param, param, param))
-    res = curseur.fetchall()
+    res = db.fetchall("SELECT * FROM livre WHERE isbn LIKE ? OR titre LIKE ? OR auteur LIKE ? OR CAST(idlivre AS TEXT) LIKE ? OR editeur LIKE ? OR categorie LIKE ?",
+                      (param, param, param, param, param, param))
     Liste_Livre = res if res else []
     update_page_view(Liste_Livre, affichage_liste_livre)
 
@@ -498,10 +489,11 @@ def RechercherEmprunt():
     term = EntryRechercheEmprunt.get().strip() if EntryRechercheEmprunt else ""
     param = f"%{term}%"
     if page == "retard":
-        curseur.execute("SELECT * FROM emprunt WHERE DATE(DateRetour) < DATE('now') AND (NomLivre LIKE ? OR Auteur LIKE ? OR NomAdherent LIKE ? OR PrenomAdherent LIKE ? OR DateRetour LIKE ?)", (param, param, param, param, param))
+        res = db.fetchall("SELECT * FROM emprunt WHERE DATE(DateRetour) < CURRENT_DATE AND (NomLivre LIKE ? OR Auteur LIKE ? OR NomAdherent LIKE ? OR PrenomAdherent LIKE ? OR DateRetour LIKE ?)",
+                          (param, param, param, param, param))
     else:
-        curseur.execute("SELECT * FROM emprunt WHERE NomLivre LIKE ? OR Auteur LIKE ? OR NomAdherent LIKE ? OR PrenomAdherent LIKE ? OR DateRetour LIKE ?", (param, param, param, param, param))
-    res = curseur.fetchall()
+        res = db.fetchall("SELECT * FROM emprunt WHERE NomLivre LIKE ? OR Auteur LIKE ? OR NomAdherent LIKE ? OR PrenomAdherent LIKE ? OR DateRetour LIKE ?",
+                          (param, param, param, param, param))
     Liste_Emprunt = res if res else []
     update_page_view(Liste_Emprunt, affichage_liste_emprunts)
 
@@ -509,11 +501,10 @@ def Retard():
     global page, Liste_Emprunt
     if page == "emprunt":
         page = "retard"
-        curseur.execute("SELECT * FROM emprunt WHERE DATE(DateRetour) < DATE('now')")
+        Liste_Emprunt = db.fetchall("SELECT * FROM emprunt WHERE DATE(DateRetour) < CURRENT_DATE")
     else:
         page = "emprunt"
-        curseur.execute("SELECT * FROM emprunt")
-    Liste_Emprunt = curseur.fetchall()
+        Liste_Emprunt = db.fetchall("SELECT * FROM emprunt")
     update_page_view(Liste_Emprunt, affichage_liste_emprunts)
 
 def annuler():
@@ -535,8 +526,9 @@ def addlivre(isbn, titre, auteur, editeur, categorie):
     if EntryCategorie_Pop and EntryCategorie_Pop.get().strip():
         categorie = EntryCategorie_Pop.get().strip()
     
-    curseur.execute("INSERT INTO livre(isbn, titre, auteur, editeur, categorie) VALUES (?, ?, ?, ?, ?)", (str(isbn), str(titre), str(auteur), str(editeur), str(categorie)))
-    connexion.commit()
+    db.execute("INSERT INTO livre(isbn, titre, auteur, editeur, categorie) VALUES (?, ?, ?, ?, ?)",
+               (str(isbn), str(titre), str(auteur), str(editeur), str(categorie)))
+    db.commit()
     annuler()
     ChangementLivre()
 
@@ -551,8 +543,9 @@ def addadherent(nom, prenom, mail, telephone):
     if EntryTel_Pop and EntryTel_Pop.get().strip():
         telephone = EntryTel_Pop.get().strip()
     
-    curseur.execute("INSERT INTO adherent(nomAdherent, prenomAdherent, Mail, telephone) VALUES (?, ?, ?, ?)", (str(nom), str(prenom), str(mail), str(telephone)))
-    connexion.commit()
+    db.execute("INSERT INTO adherent(nomAdherent, prenomAdherent, Mail, telephone) VALUES (?, ?, ?, ?)",
+               (str(nom), str(prenom), str(mail), str(telephone)))
+    db.commit()
     annuler()
     ChangementAdherent()
 
@@ -650,11 +643,10 @@ def affichage_confirmation_adherent(nom, prenom, mail, telephone):
     CTkButton(root_annexe, text="AJOUTER", corner_radius=20, height=40, width=87, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", bg_color="white", hover=False, command=lambda: addadherent(nom, prenom, mail, telephone)).grid(row=14, column=1, columnspan=4, sticky="e", padx=(0, 10), pady=(0, 10))
 
 def Quitter():
-    connexion.commit()
-    connexion.close()
+    db.close()
     root.destroy()
     sys.exit(0)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ChangementLivre()
     root.mainloop()

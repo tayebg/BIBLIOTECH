@@ -1,86 +1,60 @@
-# 📚 BIBLIOTECH
+# BIBLIOTECH
 
-<p align="center">
-  <img src="img_readme/fond.PNG" alt="BIBLIOTECH Banner" width="800"/>
-</p>
+A desktop library management system featuring automatic ISBN bibliographic metadata fetching, book cataloging, subscriber management, loan and return tracking, overdue alerts, and contactless NFC/RFID badge support.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3"/>
-  <img src="https://img.shields.io/badge/GUI-CustomTkinter-blue?style=for-the-badge" alt="CustomTkinter"/>
-  <img src="https://img.shields.io/badge/Database-SQLite3-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite3"/>
-  <img src="https://img.shields.io/badge/Hardware-NFC%20%2F%20RFID-4C8BF5?style=for-the-badge" alt="NFC"/>
-  <img src="https://img.shields.io/badge/Author-Tayeb%20Bekkouche-orange?style=for-the-badge" alt="Author"/>
-</p>
+## Features
 
-<p align="center">
-  <b>Modern Contactless Library Management System</b><br/>
-  (Consultez la version en <a href="README_fr.md">Français 🇫🇷</a>)
-</p>
+- **Book Catalog Management**: Add books by ISBN with automatic metadata retrieval (title, author, publisher, category) via `isbnlib`.
+- **Subscriber Directory**: Register and manage library members with unique identification numbers, contact information, and search capability.
+- **Loan & Return Tracking**: Issue book loans with automated return date calculations (30 days default) and process returns.
+- **Overdue Tracking**: Dedicated filter and visual indicators for identifying overdue loans.
+- **Hardware Integration**: Dual mode support—standard desktop mode and contactless NFC/RFID card reader mode (`pyscard` / ACR122U).
+- **Flexible Database Backend**: PostgreSQL as the primary database with automatic fallback to embedded SQLite3.
 
----
+## Tech Stack
 
-## 📌 Table of Contents
-1. [Overview](#-overview)
-2. [Key Features](#-key-features)
-3. [User Interface](#-user-interface)
-4. [Technologies Used](#-technologies-used)
-5. [Installation & Setup](#-installation--setup)
-6. [Usage Guide](#-usage-guide)
-7. [Project Architecture](#-project-architecture)
-8. [Author & Credits](#-author--credits)
+- **Language**: Python 3.9+
+- **GUI Framework**: CustomTkinter
+- **Databases**: PostgreSQL (primary) / SQLite3 (embedded fallback)
+- **Database Driver**: `psycopg2-binary`
+- **Metadata Fetching**: `isbnlib`
+- **Image Processing**: Pillow (PIL)
+- **Smartcard / NFC**: `pyscard`
+- **Testing**: `pytest`
 
----
+## Project Structure
 
-## 🌟 Overview
+```
+BIBLIOTECH/
+├── img_readme/              # Interface screenshots and assets
+├── sources/
+│   ├── Annexe/
+│   │   ├── font/            # Outfit typography files
+│   │   ├── icones/          # UI icons
+│   │   └── requirements.txt # Dependency list
+│   ├── nfc/                 # ACR122U NFC reader drivers and utilities
+│   ├── db.py                # Database abstraction layer (PostgreSQL & SQLite)
+│   ├── migrate.py           # Data migration utility (SQLite -> PostgreSQL)
+│   ├── BIBLIOTECH.py        # Standard desktop application
+│   ├── BIBLIOTECH_nfc.py    # Contactless NFC hardware application
+│   ├── bibliotheque.db      # SQLite database (standard mode)
+│   └── bibliotheque_nfc.db  # SQLite database (NFC mode)
+├── tests/
+│   ├── test_database.py     # Database schema, CRUD, search, and overdue tests
+│   └── test_logic.py        # Business logic and formatting tests
+├── .env.example             # Database configuration template
+├── .gitignore
+├── requirements.txt         # Root package requirements
+└── README.md
+```
 
-**BIBLIOTECH** is a comprehensive, intuitive desktop application designed for modern library operations. It bridges physical media with digital cataloging through automated ISBN metadata lookup and optional contactless NFC / RFID badge integration for instant member identification and book checkouts.
+## Requirements
 
----
+- Python 3.9 or higher
+- PostgreSQL (optional, recommended for production/multi-user) or SQLite (built-in fallback)
+- ACR122U NFC / RFID reader (optional, only required when running `BIBLIOTECH_nfc.py`)
 
-## ✨ Key Features
-
-- 📖 **Catalog Management**: Add, search, sort, and remove books with automatic metadata retrieval (title, author, publisher, category) via ISBN lookup.
-- 👤 **Member Directory**: Manage library subscribers with contact details, custom identifiers, and quick profile search.
-- 🔄 **Loan & Return Tracking**: Simple 1-click borrowing and return workflow with automatic return date calculation (30 days default).
-- ⏰ **Overdue Monitoring**: Dedicated overdue loan tracker highlighting late returns with quick-action indicators.
-- 🏷️ **Contactless NFC Integration**: Support for NFC/RFID card readers for rapid member scanning and contactless operations.
-- 🎨 **Modern Responsive UI**: Built with CustomTkinter featuring dark theme aesthetics, smooth pagination, and live sorting.
-
----
-
-## 🖥️ User Interface
-
-### Main Dashboard (Books View)
-<p align="center">
-  <img src="img_readme/menu_livre.PNG" alt="Livre Menu" width="750"/>
-</p>
-
-### Member Directory & Borrowing Interface
-<p align="center">
-  <img src="img_readme/Capture.PNG" alt="Add Confirmation Modal" width="450"/>
-  &nbsp;&nbsp;
-  <img src="img_readme/Capture2.PNG" alt="Confirmation Modal 2" width="450"/>
-</p>
-
----
-
-## 🛠️ Technologies Used
-
-| Technology | Purpose |
-| :--- | :--- |
-| **[Python 3](https://www.python.org/)** | Core programming language |
-| **[CustomTkinter](https://github.com/TomSchimansky/CustomTkinter)** | Modern desktop GUI framework |
-| **[SQLite3](https://docs.python.org/3/library/sqlite3.html)** | Embedded relational database engine |
-| **[isbnlib](https://pypi.org/project/isbnlib/)** | Automated bibliographic data and metadata extraction |
-| **[Pillow (PIL)](https://pillow.readthedocs.io/)** | Image rendering and asset processing |
-| **[nfcpy](https://nfcpy.readthedocs.io/) / smartcard** | NFC / RFID reader communication (for NFC mode) |
-
----
-
-## 🚀 Installation & Setup
-
-### Prerequisites
-- Python 3.9 or higher installed on your system.
+## Installation
 
 ### 1. Clone the repository
 ```bash
@@ -88,7 +62,7 @@ git clone https://github.com/tayebg/BIBLIOTECH.git
 cd BIBLIOTECH
 ```
 
-### 2. Create and activate a Virtual Environment
+### 2. Create and activate a virtual environment
 ```bash
 # Windows
 python -m venv .venv
@@ -99,63 +73,76 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### 3. Install Dependencies
+### 3. Install dependencies
 ```bash
-pip install -r sources/Annexe/requirements.txt
+pip install -r requirements.txt
 ```
 
-### 4. Run the Application
+## Environment Variables & PostgreSQL Setup
 
-#### Standard Desktop Version (No NFC hardware required)
+Copy `.env.example` to `.env` in the project root:
 ```bash
-cd sources
-python BIBLIOTECH.py
+cp .env.example .env
 ```
 
-#### Contactless Hardware Version (With NFC reader)
+Configure your database connection in `.env`:
+```ini
+# Options: postgresql or sqlite
+DB_TYPE=postgresql
+
+# PostgreSQL Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=bibliotech
+DB_USER=postgres
+DB_PASSWORD=your_password_here
+
+# SQLite Fallback Configuration
+SQLITE_PATH=bibliotheque.db
+```
+
+### Creating the PostgreSQL Database
+If using PostgreSQL, create the database before running:
+```sql
+CREATE DATABASE bibliotech;
+```
+The application will automatically initialize all required tables on startup.
+
+### Migrating Existing Data from SQLite to PostgreSQL
+To migrate sample data from the existing SQLite database into PostgreSQL:
 ```bash
-cd sources
-python BIBLIOTECH_nfc.py
+python sources/migrate.py
 ```
 
----
+## How to Run
 
-## 📖 Usage Guide
-
-1. **Adding Books**: Navigate to the **LIVRE** tab, type or scan the book's ISBN, enter a category, and click **AJOUTER**. Book details are automatically fetched and displayed in a confirmation popup.
-2. **Adding Members**: In the **ADHERENT** tab, enter the subscriber's name, email, and phone number, then click **AJOUTER**.
-3. **Borrowing a Book**: In the **EMPRUNT** tab, enter the book's ISBN and member ID, then click **AJOUTER**.
-4. **Returning a Book**: In the **EMPRUNT** tab, provide the book ISBN and member ID, then click **RETOUR**.
-5. **Viewing Late Returns**: Click **Livres en retard** on the Emprunt tab to filter overdue items.
-
----
-
-## 📁 Project Architecture
-
-```
-BIBLIOTECH/
-├── img_readme/              # Screenshots and visual assets
-├── sources/
-│   ├── Annexe/
-│   │   ├── font/            # Typography (Outfit Font)
-│   │   ├── icones/          # UI Icon assets
-│   │   └── requirements.txt # Python dependencies
-│   ├── nfc/                 # NFC driver and helper modules
-│   ├── BIBLIOTECH.py        # Main standard desktop application
-│   ├── BIBLIOTECH_nfc.py    # Contactless NFC-enabled application
-│   ├── bibliotheque.db      # SQLite database (standard)
-│   └── bibliotheque_nfc.db  # SQLite database (NFC)
-├── .gitignore
-├── README.md                # English documentation
-└── README_fr.md             # French documentation
+### Standard Desktop Mode (No special hardware required)
+```bash
+python sources/BIBLIOTECH.py
 ```
 
----
+### Contactless NFC Hardware Mode (Requires ACR122U Reader)
+```bash
+python sources/BIBLIOTECH_nfc.py
+```
 
-## ✍️ Author & Credits
+## Running Tests
 
-- **Author & Maintainer**: [Tayeb Bekkouche (@tayebg)](https://github.com/tayebg)  
-- **Email**: [tayebekk2004@gmail.com](mailto:tayebekk2004@gmail.com)  
-- **Repository**: [https://github.com/tayebg/BIBLIOTECH](https://github.com/tayebg/BIBLIOTECH)
+Run the automated test suite using `pytest`:
+```bash
+pytest -v
+```
 
-> *Project re-engineered, modernized, and maintained by Tayeb Bekkouche.*
+## Basic Usage
+
+1. **Adding Books**: Open the **LIVRE** tab, enter the book's ISBN and category, then click **AJOUTER**. A modal confirmation dialog will appear with pre-filled metadata fetched from online bibliographic registries.
+2. **Adding Members**: Open the **ADHERENT** tab, enter the member's details (name, email, phone), and click **AJOUTER**.
+3. **Borrowing Books**: In the **EMPRUNT** tab, enter the book ISBN / ID and member ID, then click **AJOUTER**.
+4. **Returning Books**: In the **EMPRUNT** tab, enter the book and member details, then click **RETOUR**.
+5. **Checking Overdue Books**: In the **EMPRUNT** tab, click **Livres en retard** to view books past their 30-day return window.
+
+## Author
+
+- **Tayeb Bekkouche** ([@tayebg](https://github.com/tayebg))
+- Contact: tayebekk2004@gmail.com
+- Repository: [https://github.com/tayebg/BIBLIOTECH](https://github.com/tayebg/BIBLIOTECH)

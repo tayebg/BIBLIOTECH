@@ -9,7 +9,8 @@
  
  Description:
  NFC-enabled version for RFID/NFC card readers and barcode scanners.
- Built with Python, CustomTkinter, SQLite3, NFC reader, and isbnlib.
+ Built with Python, CustomTkinter, Database Layer (PostgreSQL & SQLite), 
+ NFC reader (smartcard), and bibliographic lookup (isbnlib).
 =============================================================================
 """
 
@@ -17,912 +18,630 @@ import os
 import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(BASE_DIR, "nfc"))
-DB_PATH = os.path.join(BASE_DIR, "bibliotheque_nfc.db")
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+nfc_dir = os.path.join(BASE_DIR, "nfc")
+if nfc_dir not in sys.path:
+    sys.path.insert(0, nfc_dir)
+
+from db import get_db
+
 ANNEXE_DIR = os.path.join(BASE_DIR, "Annexe")
 ICONES_DIR = os.path.join(ANNEXE_DIR, "icones")
 
-### importation des librairies utilisée
-import sys
-
-import nfc
-from tkinter import *
-from customtkinter import *
-from PIL import Image
-from sqlite3 import *
 from datetime import date, timedelta
-from isbnlib import *
+from tkinter import Tk
+from customtkinter import (
+    CTkButton,
+    CTkEntry,
+    CTkImage,
+    CTkLabel,
+    CTkProgressBar,
+    CTkToplevel,
+)
+from PIL import Image
+from isbnlib import meta
 
-###   création de la fenetre TKinter avec les bonnes caractéristique ainsi que les polices d'écritures utilisée
+# --- Application Initialization ---
 root = Tk()
 root.geometry("1080x890")
-root.title("Bibliotech")
-root.configure(bg='#0A1437')
+root.title("BIBLIOTECH - Library Management (NFC Mode)")
+root.configure(bg="#0A1437")
 root.resizable(False, False)
-Outfit = ('Outfit', 10)
-OutfitPlus = ('Outfit',15)
-OutfitBold = ('Outfit', 15,"bold")
-OutfitTitle = ('Outfit', 30,"bold")
-connexion = connect(DB_PATH)
+
+# Typography
+Outfit = ("Outfit", 10)
+OutfitPlus = ("Outfit", 15)
+OutfitBold = ("Outfit", 15, "bold")
+OutfitTitle = ("Outfit", 30, "bold")
+
+# Database Connection (PostgreSQL with SQLite fallback)
+db = get_db(sqlite_path=os.path.join(BASE_DIR, "bibliotheque_nfc.db"))
+
 today_date = date.today()
-td = timedelta(30)
-curseur = connexion.cursor()
-for i in range(25):
-    Lab = CTkLabel(root, text="",corner_radius=10,height=10,width=10,font=Outfit,fg_color="#0A1437").grid(row=i,column=i)
-###   Fonction gérant l'affichage du programme en Tkinter
-def affichage_menu():
-    """
-    Fonction permettant de gerer l'affichage du menu, c'est à dire du titre en haut a gauche, de la séléction de l'onglet ainsi que du boutton quitter
-    """
-    LabelEspace_M0 = CTkLabel(root, text="",corner_radius=10,height=10,width=20,font=Outfit,text_color="#1C1C1E",fg_color="#0A1437").grid(row=0,column=0)
-    LabelTitre = CTkLabel(root, text="BIBLIOTECH",corner_radius=10,height= 19,width=120,font=OutfitTitle,text_color="white",fg_color="#0A1437").grid(row=2,column=1)
-    LabelEspace_M1 = CTkLabel(root, text="",corner_radius=10,height=10,width=216,font=Outfit,text_color="#1C1C1E",fg_color="#0A1437").grid(row=2,column=2)
-    LabelTriple = CTkLabel(root, text="",corner_radius=33,height= 55,width=285,font=Outfit,text_color="white",fg_color="white").grid(row=1,rowspan=3,column=3,columnspan=3)
-    BouttonAdherent = CTkButton(root, text="ADHERENT",corner_radius=20,height= 35,width=92,font=Outfit,text_color="#1C1C1E",fg_color="white",bg_color="white",hover=False,command=ChangementAdherent).grid(row=2,column=3,sticky="e")
-    BouttonLivre = CTkButton(root, text="LIVRE",corner_radius=20,height= 35,width=61,font=Outfit,text_color="#1C1C1E",fg_color="white",bg_color="white",hover=False,command=ChangementLivre).grid(row=2,column=4)
-    BouttonEmprunt = CTkButton(root, text="EMPRUNT",corner_radius=20,height= 35,width=79,font=Outfit,text_color="#1C1C1E",fg_color="white",bg_color="white",hover=False,command=ChangementEmprunts).grid(row=2,column=5,sticky="w")
-    LabelEspace_M2 = CTkLabel(root, text="",corner_radius=10,height=10,width=230,font=Outfit,text_color="#1C1C1E",fg_color="#0A1437").grid(row=1,column=6,columnspan=2)
-    BouttonQuitter = CTkButton(root, text="QUITTER",corner_radius=20,height= 50,width=87,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",hover=False,command=Quitter).grid(row=1,rowspan=3,column=8,columnspan=2)
-def affichage_liste_adherent():
-    """
-    Fonction permettant de gerer l'affichage de l'onglet adherent, c'est a dire des bouttons et entry pour l'ajout, des boutons et entry pour la recherche et de la liste avec les boutons (supprimer, page suivante/precedentes si il y a assez de livre pour qu'il soit afficher sur plusieurs page,...)
-    """
-    global Liste_Adherent
-    global num_liste_affiche
-    global num_liste_max
-    global page
-    global EntryNom
-    global EntryPrenom
-    global EntryMail
-    global EntryTelephone
-    global EntryRechercheAdherent
-    page="adherent"
-    num_liste_max=len(Liste_Adherent)//10
-    if len(Liste_Adherent)%10!=0:
-        num_liste_max+=1
-    BouttonAdherent = CTkButton(root, text="ADHERENT",corner_radius=20,height= 35,width=92,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=ChangementAdherent).grid(row=2,column=3,sticky="e")
-    LabelEspace_LA0 = CTkLabel(root, text="",corner_radius=10,height=30,font=Outfit,fg_color="#0A1437").grid(row=4,column=0)
-    LabelQuintuple = CTkLabel(root, text="",corner_radius=15,height= 70,width=1025,font=Outfit,text_color="white",fg_color="white").grid(row=5,rowspan=3,column=1,columnspan=10)
-    EntryNom = CTkEntry(root, placeholder_text="Nom",placeholder_text_color="#7882A5",width=180,corner_radius=10,height= 50,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryNom.grid(row=6,column=1,padx=(20,0))
-    EntryPrenom = CTkEntry(root, placeholder_text="Prenom",placeholder_text_color="#7882A5",corner_radius=10,height= 50,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",width=180,border_width=0)
-    EntryPrenom.grid(row=6,column=2)
-    EntryMail = CTkEntry(root, placeholder_text="Mail",placeholder_text_color="#7882A5",corner_radius=10,height= 50,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",width=180,border_width=0)
-    EntryMail.grid(row=6,column=3,columnspan=2)
-    EntryTelephone = CTkEntry(root, placeholder_text="Telephone",placeholder_text_color="#7882A5",corner_radius=10,height= 50,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",width=180,border_width=0)
-    EntryTelephone.grid(row=6,column=5,columnspan=2,padx=(20,0))
-    BouttonAjouter = CTkButton(root, text="AJOUTER",corner_radius=20,height= 50,width=87,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=Ajouter_Adherent).grid(row=6,column=8,columnspan=2)
-    LabelSimple = CTkLabel(root, text="",corner_radius=15,height= 70,width=600,font=Outfit,text_color="white",fg_color="white").grid(row=9,rowspan=3,column=1,columnspan=4)
-    EntryRechercheAdherent = CTkEntry(root, placeholder_text="Rechercher un Adherent",placeholder_text_color="#7882A5",corner_radius=10,height= 50,width=380,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryRechercheAdherent.grid(row=10,column=1,columnspan=2)
-    BouttonRecherche=CTkButton(root, text="RECHERCHER",corner_radius=20,height= 50,width=87,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=RechercherAdherent).grid(row=10,column=3,columnspan=2,sticky="e",padx=(0,20))
-    if len(Liste_Adherent)<=10:
-        HauteurDeca=50+55*len(Liste_Adherent)
-    else:
-        if num_liste_affiche==num_liste_max:
-            if len(Liste_Adherent)%10!=0:
-                HauteurDeca=50+55*(len(Liste_Adherent)%10)
-            else:
-                HauteurDeca=600
-        else:
-            HauteurDeca=600
-    LabelDeca = CTkLabel(root, text="",corner_radius=15,height= HauteurDeca,width=1025,font=Outfit,text_color="white",fg_color="white").grid(row=13,rowspan=22,column=1,columnspan=10,sticky="n")
-    LabelNom = CTkButton(root, text="Nom >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="nomAdherent",table="adherent":sortby(column,table)).grid(row=13,column=1,pady=10,sticky="w",padx=(25,0))
-    LabelPrenom = CTkButton(root, text="Prenom >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="prenomAdherent",table="adherent":sortby(column,table)).grid(row=13,column=2,pady=10,sticky="w",padx=(10,0))
-    LabelMail = CTkButton(root, text="Mail >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="Mail",table="adherent":sortby(column,table)).grid(row=13,column=3,columnspan=2,pady=10,sticky="w",padx=(10,0))
-    LabelTelephone = CTkButton(root, text="Telephone >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="telephone",table="adherent":sortby(column,table)).grid(row=13,column=5,columnspan=2,pady=10,sticky="w",padx=(10,0))
-    LabelIdentifiant = CTkButton(root, text="Identifiant >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="identifiant",table="adherent":sortby(column,table)).grid(row=13,column=7,columnspan=2,pady=10,sticky="w",padx=(10,0))
-    progressbar = CTkProgressBar(root,height=1,width=1040,fg_color="#E6E6E6",progress_color="#E6E6E6",border_width=0).grid(row=14, column=1,columnspan=10)
-    if len(Liste_Adherent)<=10:
-        for i in range(len(Liste_Adherent)):
-            LabelNomAdherentI=CTkLabel(root,wraplength=180, text=Liste_Affiche[i][1] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=1,sticky="w",padx=(25,0))
-            LabelPrenomAdherent=CTkLabel(root,wraplength=180, text=Liste_Affiche[i][2] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=2,sticky="w",padx=(10,0))
-            LabelMailAdherent=CTkLabel(root,wraplength=180, text=Lim(Liste_Affiche[i][3],2) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=3,columnspan=2,sticky="w",padx=(10,0))
-            LabelTelephoneAdherent=CTkLabel(root,wraplength=180, text=Lim(Liste_Affiche[i][4],3) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=5,columnspan=2,sticky="w",padx=(10,0))
-            LabelIdentifiantAdherent=CTkLabel(root,wraplength=180, text=Lim(str(Liste_Affiche[i][0]),4) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=7,columnspan=2,sticky="w",padx=(10,0))
-            LabelPoubelle= CTkButton(root,bg_color="white",fg_color="white",hover_color="red",text="",image=Image_Poubelle,width=15,height=15,command=lambda row=i,page=num_liste_affiche: delete(row,page)).grid(row=15+2*i,column=7,columnspan=3,sticky="e",padx=(0,20))
-            if i!=len(Liste_Adherent)-1:
-                progressbar = CTkProgressBar(root,height=1,width=1040,fg_color="#E6E6E6",progress_color="#E6E6E6",border_width=0).grid(row=16+2*i, column=1,columnspan=10)
+td = timedelta(days=30)
 
-    else:
-        max=0
-        if num_liste_affiche==num_liste_max:
-            if len(Liste_Adherent)%10!=0:
-                max=len(Liste_Adherent)%10
-            else:
-                max=10
-        else:
-            max=10
-        for i in range(max):
-            LabelNomAdherentI=CTkLabel(root,wraplength=180, text=Liste_Affiche[i][1] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=1,sticky="w",padx=(25,0))
-            LabelPrenomAdherent=CTkLabel(root,wraplength=180, text=Liste_Affiche[i][2] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=2,sticky="w",padx=(10,0))
-            LabelMailAdherent=CTkLabel(root,wraplength=180, text=Lim(Liste_Affiche[i][3],2) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=3,columnspan=2,sticky="w",padx=(10,0))
-            LabelTelephoneAdherent=CTkLabel(root,wraplength=180, text=Lim(Liste_Affiche[i][4],3) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=5,columnspan=2,sticky="w",padx=(10,0))
-            LabelIdentifiantAdherent=CTkLabel(root,wraplength=180, text=Lim(str(Liste_Affiche[i][0]),4) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=7,columnspan=2,sticky="w",padx=(10,0))
-            LabelPoubelle= CTkButton(root,bg_color="white",fg_color="white",hover_color="red",text="",image=Image_Poubelle,width=15,height=15,command=lambda row=i,page=num_liste_affiche: delete(row,page)).grid(row=15+2*i,column=7,columnspan=3,sticky="e",padx=(0,20))
-            if i!=max-1:
-                progressbar = CTkProgressBar(root,height=1,width=1040,fg_color="#E6E6E6",progress_color="#E6E6E6",border_width=0).grid(row=16+2*i, column=1,columnspan=10)
-    if num_liste_affiche>1:
-        Label_Previous_Page = CTkButton(root,bg_color="white",fg_color="white",text="",image=Image_Previous_Page,width=15,height=15,hover_color="#BAC8EB",command=Previous_Page).grid(row=13,column=8)
-    if num_liste_affiche+1<=num_liste_max:
-        Label_Next_Page = CTkButton(root,bg_color="white",fg_color="white",text="",image=Image_Next_Page,width=15,height=15,hover_color="#BAC8EB",command=Next_Page).grid(row=13,column=9,sticky="w")
-def affichage_liste_livre():
-    """
-    Fonction permettant de gerer l'affichage de l'onglet livre, c'est a dire des bouttons et entry pour l'ajout, des boutons et entry pour la recherche et de la liste avec les boutons (supprimer, page suivante/precedentes si il y a assez de livre pour qu'il soit afficher sur plusieurs page,...)
-    """
-    global Liste_Affiche
-    global num_liste_affiche
-    global num_liste_max
-    global page
-    global EntryScanLivre
-    global EntryCategorie
-    global EntryRechercheLivre
-    page="livre"
-    num_liste_max=len(Liste_Livre)//10
-    if len(Liste_Livre)%10!=0:
-        num_liste_max+=1
-    BouttonLivre = CTkButton(root, text="LIVRE",corner_radius=20,height= 35,width=61,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=ChangementLivre).grid(row=2,column=4)
-    LabelEspace_LL0 = CTkLabel(root, text="",corner_radius=10,height=30,font=Outfit,fg_color="#0A1437").grid(row=4,column=0)
-    LabelQuintuple = CTkLabel(root, text="",corner_radius=15,height= 70,width=715,font=Outfit,text_color="white",fg_color="white").grid(row=5,rowspan=3,column=1,columnspan=5,sticky="w")
-    EntryScanLivre = CTkEntry(root, placeholder_text="Scannez le code barre d'un livre",placeholder_text_color="#7882A5",width=400,corner_radius=10,height= 50,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryScanLivre.grid(row=6,column=1,columnspan=2,sticky="w",padx=(10,0))
-    EntryCategorie = CTkEntry(root, placeholder_text="Catégorie",placeholder_text_color="#7882A5",corner_radius=10,height= 50,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",width=180,border_width=0)
-    EntryCategorie.grid(row=6,column=2,columnspan=3,padx=(0,15),sticky="e")
-    BouttonAjouter = CTkButton(root, text="AJOUTER",corner_radius=20,height= 50,width=87,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=Ajouter_Livre).grid(row=6,column=5,padx=(0,25),sticky="w")
-    LabelSimple = CTkLabel(root, text="",corner_radius=15,height= 70,width=600,font=Outfit,text_color="white",fg_color="white").grid(row=9,rowspan=3,column=1,columnspan=4,padx=(0,20))
-    EntryRechercheLivre = CTkEntry(root, placeholder_text="Rechercher un livre",placeholder_text_color="#7882A5",corner_radius=10,height= 50,width=380,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryRechercheLivre.grid(row=10,column=1,columnspan=2,sticky="w",padx=(10,0))
-    BouttonRecherche=CTkButton(root, text="RECHERCHER",corner_radius=20,height= 50,width=87,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=RechercherLivre).grid(row=10,column=3,columnspan=2,sticky="e",padx=(0,30))
-    if len(Liste_Livre)<=10:
-        HauteurDeca=50+55*len(Liste_Livre)
-    else:
-        if num_liste_affiche==num_liste_max:
-            if len(Liste_Livre)%10!=0:
-                HauteurDeca=50+55*(len(Liste_Livre)%10)
-            else:
-                HauteurDeca=600
-        else:
-            HauteurDeca=600
-    LabelDeca = CTkLabel(root, text="",corner_radius=15,height= HauteurDeca,width=1035,font=Outfit,text_color="white",fg_color="white").grid(row=13,rowspan=22,column=1,columnspan=10,sticky="n",padx=(0,25))
-    LabelISBN = CTkButton(root, text="ISBN >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="isbn",table="livre":sortby(column,table)).grid(row=13,column=1,pady=10,sticky="w",padx=(5,0))
-    LabelTitre = CTkButton(root, text="Titre >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="titre",table="livre":sortby(column,table)).grid(row=13,column=1,columnspan=2,padx=(100,0),sticky="w")
-    LabelAuteur = CTkButton(root, text="Auteur >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="auteur",table="livre":sortby(column,table)).grid(row=13,column=3,columnspan=2,pady=10,sticky="w",padx=(10,0))
-    LabelEditeur = CTkButton(root, text="Editeur >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="editeur",table="livre":sortby(column,table)).grid(row=13,column=5,columnspan=2,pady=10,sticky="w",padx=(10,0))
-    LabelCategorie = CTkButton(root, text="Categorie >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="categorie",table="livre":sortby(column,table)).grid(row=13,column=7,columnspan=2,pady=10,sticky="w",padx=(0,0))
-    progressbar = CTkProgressBar(root,height=1,width=1060,fg_color="#E6E6E6",progress_color="#E6E6E6",border_width=0).grid(row=14, column=1,columnspan=10)
-
-    if len(Liste_Livre)<=10:
-        for i in range(len(Liste_Livre)):
-            LabelISBNLivre=CTkLabel(root, text=Liste_Affiche[i][0] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=1,sticky="w",padx=(15,0))
-            LabelTitreLivre=CTkLabel(root, text=Lim(Liste_Affiche[i][1],1) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=1,columnspan=2,padx=(100,0),sticky="w")
-            LabelAuteurLivre=CTkLabel(root, text=Lim(Liste_Affiche[i][2],2) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=3,columnspan=2,sticky="w",padx=(10,0))
-            LabelEditeurLivre=CTkLabel(root, text=Lim(Liste_Affiche[i][3],3) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=5,columnspan=2,sticky="w",padx=(10,0))
-            LabelCategorieLivre=CTkLabel(root, text=Lim(Liste_Affiche[i][6],4) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=7,columnspan=2,sticky="w",padx=(10,0))
-            LabelPoubelle= CTkButton(root,bg_color="white",fg_color="white",hover_color="red",text="",image=Image_Poubelle,width=15,height=15,command=lambda row=i,page=num_liste_affiche: delete(row,page)).grid(row=15+2*i,column=7,columnspan=3,sticky="e",padx=(0,20))
-            if i!=len(Liste_Livre)-1:
-                progressbar = CTkProgressBar(root,height=1,width=1060,fg_color="#E6E6E6",progress_color="#E6E6E6",border_width=0).grid(row=16+2*i, column=1,columnspan=10)
-    else:
-        max=0
-        if num_liste_affiche==num_liste_max:
-            if len(Liste_Livre)%10!=0:
-                max=len(Liste_Livre)%10
-            else:
-                max=10
-        else:
-            max=10
-        for i in range(max):
-            LabelISBNLivre=CTkLabel(root, text=Liste_Affiche[i][0] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=1,sticky="w",padx=(15,0))
-            LabelTitreLivre=CTkLabel(root, text=Lim(Liste_Affiche[i][1],1) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=1,columnspan=2,padx=(100,0),sticky="w")
-            LabelAuteurLivre=CTkLabel(root, text=Lim(Liste_Affiche[i][2],2) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=3,columnspan=2,sticky="w",padx=(10,0))
-            LabelEditeurLivre=CTkLabel(root, text=Lim(Liste_Affiche[i][3],3) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=5,columnspan=2,sticky="w",padx=(10,0))
-            LabelCategorieLivre=CTkLabel(root, text=Lim(Liste_Affiche[i][6],4) ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=7,columnspan=2,sticky="w",padx=(10,0))
-            LabelPoubelle= CTkButton(root,bg_color="white",fg_color="white",hover_color="red",text="",image=Image_Poubelle,width=15,height=15,command=lambda row=i,page=num_liste_affiche: delete(row,page)).grid(row=15+2*i,column=7,columnspan=3,sticky="e",padx=(0,20))
-            if i!=max-1:
-                progressbar = CTkProgressBar(root,height=1,width=1060,fg_color="#E6E6E6",progress_color="#E6E6E6",border_width=0).grid(row=16+2*i, column=1,columnspan=10)
-    if num_liste_affiche>1:
-        Label_Previous_Page = CTkButton(root,bg_color="white",fg_color="white",text="",image=Image_Previous_Page,width=15,height=15,hover_color="#BAC8EB",command=Previous_Page).grid(row=13,column=8,columnspan=2,sticky="w")
-    if num_liste_affiche+1<=num_liste_max:
-        Label_Next_Page = CTkButton(root,bg_color="white",fg_color="white",text="",image=Image_Next_Page,width=15,height=15,hover_color="#BAC8EB",command=Next_Page).grid(row=13,column=8,columnspan=2)
-def affichage_liste_emprunts():
-    """
-    Fonction permettant de gerer l'affichage de l'onglet emprunt, c'est a dire des bouttons et entry pour l'ajout, des boutons et entry pour la recherche et de la liste avec les boutons (supprimer, page suivante/precedentes si il y a assez de livre pour qu'il soit afficher sur plusieurs page,...)
-    """
-    global num_liste_affiche
-    global num_liste_max
-    global page
-    global Livre_Emprunt
-    global EntryScanEmprunt
-    global EntryAdherentCarte
-    if page!="emprunt" and page!="retard":
-        page="emprunt"
-    num_liste_max=len(Liste_Emprunt)//10
-    if len(Liste_Emprunt)%10!=0:
-        num_liste_max+=1
-    BouttonEmprunt = CTkButton(root, text="EMPRUNT",corner_radius=20,height= 35,width=92,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=ChangementEmprunts).grid(row=2,column=5,sticky="w")
-    LabelEspace_LA0 = CTkLabel(root, text="",corner_radius=10,height=30,font=Outfit,fg_color="#0A1437").grid(row=4,column=0)
-    LabelQuintuple = CTkLabel(root, text="",corner_radius=15,height= 70,width=1025,font=Outfit,text_color="white",fg_color="white").grid(row=5,rowspan=3,column=1,columnspan=10,sticky="w")
-    EntryScanEmprunt = CTkEntry(root, placeholder_text="Scannez le NFC d'un livre",placeholder_text_color="#7882A5",width=370,corner_radius=10,height= 50,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryScanEmprunt.grid(row=6,column=1,columnspan=3,padx=(10,0),sticky='w')
-    EntryAdherentCarte = CTkButton(root, text="Scannez la carte de l'adhérent",text_color="#7882A5",corner_radius=10,height= 50,font=Outfit,fg_color="#E5EAF8",bg_color="white",width=370,border_width=0,anchor="w",hover=False,command=scanadh)
-    EntryAdherentCarte.grid(row=6,column=2,columnspan=6,sticky='w',padx=(190,0))
-    BouttonRetour = CTkButton(root, text="RETOUR",corner_radius=20,height= 50,width=110,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=Retour).grid(row=6,column=6,columnspan=4, padx=(0,130), sticky='e')
-    BouttonAjouter = CTkButton(root, text="AJOUTER",corner_radius=20,height= 50,width=110,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=Emprunt).grid(row=6,column=7,columnspan=3, padx=(0,10),sticky="e")
-    LabelSimple = CTkLabel(root, text="",corner_radius=15,height= 70,width=600,font=Outfit,text_color="white",fg_color="white").grid(row=9,rowspan=3,column=1,columnspan=4,padx=(0,10))
-    EntryRechercheEmprunt = CTkEntry(root, placeholder_text="Rechercher un Adherent",placeholder_text_color="#7882A5",corner_radius=10,height= 50,width=380,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryRechercheEmprunt.grid(row=10,column=1,columnspan=2,padx=(0,10))
-    BouttonRecherche=CTkButton(root, text="RECHERCHER",corner_radius=20,height= 50,width=87,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=RechercherEmprunt).grid(row=10,column=3,columnspan=2,sticky="e",padx=(0,20))
-    LabelButton = CTkButton(root, text="Livres en retard",corner_radius=15,height= 30,width=115,font=Outfit,text_color="#1C1C1E",fg_color="white",hover=False,command=Retard).grid(row=9,rowspan=3,column=7,columnspan=3,padx=(90,0))
-    if len(Liste_Emprunt)<=10:
-        HauteurDeca=50+55*len(Liste_Emprunt)
-    else:
-        if num_liste_affiche==num_liste_max:
-            if len(Liste_Emprunt)%10!=0:
-                HauteurDeca=50+55*(len(Liste_Emprunt)%10)
-            else:
-                HauteurDeca=650
-        else:
-            HauteurDeca=650
-    LabelDeca = CTkLabel(root, text="",corner_radius=15,height= HauteurDeca,width=1025,font=Outfit,text_color="white",fg_color="white").grid(row=13,rowspan=22,column=1,columnspan=10,sticky="wn")
-    Label_Livre_Emprunt = CTkButton(root, text="Livre >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="NomLivre",table=page:sortby(column,table)).grid(row=13,column=1,pady=10,sticky="w",padx=(25,0))
-    Label_Auteur_Emprunt = CTkButton(root, text="Auteur >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="Auteur",table=page:sortby(column,table)).grid(row=13,column=2,pady=10,sticky="w",padx=(10,0))
-    Label_Nom_Emprunt = CTkButton(root, text="Nom de l'Adhérent >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="NomAdherent",table=page:sortby(column,table)).grid(row=13,column=3,columnspan=2,pady=10,sticky="w",padx=(10,0))
-    Label_Prenom_Emprunt = CTkButton(root, text="Prenom de l'Adhérent >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="PrenomAdherent",table=page:sortby(column,table)).grid(row=13,column=5,columnspan=2,pady=10,sticky="w",padx=(10,0))
-    Label_Date_Emprunt = CTkButton(root, text="Retour >", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,hover=False,command=lambda column="DateRetour",table=page:sortby(column,table)).grid(row=13,column=7,columnspan=2,pady=10,sticky="w",padx=(10,0))
-    progressbar = CTkProgressBar(root,height=1,width=1040,fg_color="#E6E6E6",progress_color="#E6E6E6",border_width=0).grid(row=14, column=1,columnspan=10)
-    if len(Liste_Emprunt)<=10:
-        for i in range(len(Liste_Emprunt)):
-            LabelLivre=CTkLabel(root,wraplength=180, text=Liste_Emprunt[i][1]  ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=1,sticky="nw",padx=(25,0))
-            LabelAuteur=CTkLabel(root,wraplength=180, text=Liste_Emprunt[i][7] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=2,sticky="nw",padx=(10,0))
-            LabelAdherent=CTkLabel(root,wraplength=180, text=Liste_Emprunt[i][6] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=3,columnspan=2,sticky="nw",padx=(10,0))
-            LabelRetour=CTkLabel(root,wraplength=180, text=Liste_Emprunt[i][8] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=5,columnspan=2,sticky="nw",padx=(10,0))
-            LabelIdentifiant=CTkLabel(root,wraplength=180, text=Liste_Emprunt[i][3] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=7,columnspan=2,sticky="nw",padx=(10,0))
-            if Liste_Emprunt[i][3]<=str(today_date):
-                LabelRetard= CTkButton(root,bg_color="white",fg_color="white",hover_color="red",text="",image=Image_Retard,width=15,height=15,command=lambda row=i,page=num_liste_affiche: delete(row,page)).grid(row=15+2*i,column=7,columnspan=3,sticky="e",padx=(0,20))
-            if i!=len(Liste_Emprunt)-1:
-                progressbar = CTkProgressBar(root,height=1,width=1040,fg_color="#E6E6E6",progress_color="#E6E6E6",border_width=0).grid(row=16+2*i, column=1,columnspan=10)
-
-    else:
-        max=0
-        if num_liste_affiche==num_liste_max:
-            if len(Liste_Emprunt)%10!=0:
-                max=len(Liste_Emprunt)%10
-            else:
-                max=10
-        else:
-            max=10
-        for i in range(max):
-            LabelLivre=CTkLabel(root,wraplength=180, text=Liste_Affiche[i][1]  ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=1,sticky="w",padx=(25,0))
-            LabelAuteur=CTkLabel(root,wraplength=180, text=Liste_Affiche[i][2] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=2,sticky="w",padx=(10,0))
-            LabelAdherent=CTkLabel(root,wraplength=180, text=Liste_Affiche[i][3] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=3,columnspan=2,sticky="w",padx=(10,0))
-            LabelRetour=CTkLabel(root,wraplength=180, text=Liste_Affiche[i][4] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=5,columnspan=2,sticky="w",padx=(10,0))
-            LabelIdentifiant=CTkLabel(root,wraplength=180, text=Liste_Affiche[i][0] ,text_color="#1C1C1E",fg_color="white",bg_color="white",height=40,font=Outfit).grid(row=15+2*i,column=7,columnspan=2,sticky="w",padx=(10,0))
-            LabelRetard= CTkButton(root,bg_color="white",fg_color="white",hover_color="red",text="",image=Image_Retard,width=15,height=15,command=lambda row=i,page=num_liste_affiche: delete(row,page)).grid(row=15+2*i,column=7,columnspan=3,sticky="e",padx=(0,20))
-            if i!=max-1:
-                progressbar = CTkProgressBar(root,height=1,width=1040,fg_color="#E6E6E6",progress_color="#E6E6E6",border_width=0).grid(row=16+2*i, column=1,columnspan=10)
-    if num_liste_affiche>1:
-        Label_Previous_Page = CTkButton(root,bg_color="white",fg_color="white",text="",image=Image_Previous_Page,width=15,height=15,hover_color="#BAC8EB",command=Previous_Page).grid(row=13,column=8)
-    if num_liste_affiche+1<=num_liste_max:
-        Label_Next_Page = CTkButton(root,bg_color="white",fg_color="white",text="",image=Image_Next_Page,width=15,height=15,hover_color="#BAC8EB",command=Next_Page).grid(row=13,column=9,sticky="w")
-
-###   Initialisation de variables et d'images
-
-global Liste_Livre_Affiche
+Liste_Adherent = []
+Liste_Livre = []
+Liste_Emprunt = []
 Liste_Affiche = []
-Image_Poubelle = CTkImage(Image.open(os.path.join(ICONES_DIR, "Delete.png")),size=(15,15))
-Image_Next_Page = CTkImage(Image.open(os.path.join(ICONES_DIR, "circle_right.png")),size=(15,15))
-Image_Previous_Page = CTkImage(Image.open(os.path.join(ICONES_DIR, "circle_left.png")),size=(15,15))
-Image_Retard = CTkImage(Image.open(os.path.join(ICONES_DIR, "Retard.png")),size=(15,15))
-global num_liste_affiche
-global num_liste_max
-num_liste_affiche=1
-num_liste_max=None
-global page
-page=None
+num_liste_affiche = 1
+num_liste_max = 1
+page = "livre"
+root_annexe = None
 
-###   Fonction permettant le fonctionement du programme et non plus l'affichage
+EntryNom = None
+EntryPrenom = None
+EntryMail = None
+EntryTelephone = None
+EntryRechercheAdherent = None
 
+EntryScanLivre = None
+EntryCategorie = None
+EntryRechercheLivre = None
+
+EntryScanEmprunt = None
+EntryAdherentCarte = None
+EntryRechercheEmprunt = None
+
+EntryISBN_Pop = None
+EntryTitre_Pop = None
+EntryAuteur_Pop = None
+EntryEditeur_Pop = None
+EntryCategorie_Pop = None
+
+EntryNom_Pop = None
+EntryPrenom_Pop = None
+EntryMail_Pop = None
+EntryTel_Pop = None
+
+# --- Assets Loading ---
+Image_Poubelle = CTkImage(Image.open(os.path.join(ICONES_DIR, "Delete.png")), size=(15, 15))
+Image_Next_Page = CTkImage(Image.open(os.path.join(ICONES_DIR, "circle_right.png")), size=(15, 15))
+Image_Previous_Page = CTkImage(Image.open(os.path.join(ICONES_DIR, "circle_left.png")), size=(15, 15))
+Image_Retard = CTkImage(Image.open(os.path.join(ICONES_DIR, "Retard.png")), size=(15, 15))
+
+# --- UI Helpers ---
 def clear_frame():
-    """
-    Fonction permettant de retirer tout ce qui est affiché et d'affiché des labels vide afin de gérer l'espacement des collones vide car tkinter n'affichent pas les collones si il n'y a aucun élément dedans)
-    """
-    root.geometry("1080x890")
-    for label in root.winfo_children():
-        label.destroy()
+    for widget in root.winfo_children():
+        widget.destroy()
     for i in range(25):
-        Lab = CTkLabel(root, text="",corner_radius=10,height=10,width=10,font=Outfit,fg_color="#0A1437").grid(row=i,column=i)
-def ChangementAdherent():
-    """
-    Fonction permettant de réinitialiser l'affichage et d'afficher l'onglet adherent
-    """
-    global Liste_Adherent
-    global Liste_Affiche
-    global num_liste_affiche
-    requete="SELECT * FROM adherent"
-    curseur.execute(requete)
-    connexion.commit()
-    Liste_Adherent= curseur.fetchall()
-    num_liste_affiche=1
-    Liste_Affiche=[]
-    if len(Liste_Adherent)<=10:
-        max=len(Liste_Adherent)
-    else:
-        max=10
-    for i in range(max):
-        Liste_Affiche.append(Liste_Adherent[i])
-    clear_frame()
-    affichage_menu()
-    affichage_liste_adherent()
-def ChangementLivre():
-    """
-    Fonction permettant de réinitialiser l'affichage et d'afficher l'onglet livre
-    """
-    global Liste_Livre
-    global Liste_Affiche
-    global num_liste_affiche
-    requete="SELECT * FROM livre"
-    curseur.execute(requete)
-    connexion.commit()
-    Liste_Livre= curseur.fetchall()
-    num_liste_affiche=1
-    Liste_Affiche=[]
-    if len(Liste_Livre)<=10:
-        max=len(Liste_Livre)
-    else:
-        max=10
-    for i in range(max):
-        Liste_Affiche.append(Liste_Livre[i])
-    clear_frame()
-    affichage_menu()
-    affichage_liste_livre()
-def ChangementEmprunts():
-    """
-    Fonction permettant de réinitialiser l'affichage et d'afficher l'onglet emprunt
-    """
-    global Liste_Emprunt
-    global Liste_Affiche
-    global num_liste_affiche
-    requete="SELECT * FROM emprunt"
-    curseur.execute(requete)
-    connexion.commit()
-    Liste_Emprunt = curseur.fetchall()
-    num_liste_affiche=1
-    Liste_Affiche=[]
-    if len(Liste_Emprunt)<=10:
-        max=len(Liste_Emprunt)
-    else:
-        max=10
-    for i in range(max):
-        Liste_Affiche.append(Liste_Emprunt[i])
-    clear_frame()
-    affichage_menu()
-    affichage_liste_emprunts()
-def delete(row,page_affiche):
-    """
-    Fonction permettant de gérer la suprression de la base de données, reliés au bouttons poubelles présent dans les listes, supprime l'élement associé au bouttons
-    """
-    global num_liste_affiche
-    num_liste_affiche+=-1
-    if page=="adherent":
-        requete='DELETE FROM adherent WHERE identifiant="'+str(Liste_Adherent[(page_affiche-1)*10+row][0])+'"'
-        curseur.execute(requete)
-        connexion.commit()
-        Liste_Adherent.pop((page_affiche-1)*10+row)
-        Next_Page()
-    elif page=="livre":
-        requete='DELETE FROM livre WHERE idlivre="'+str(Liste_Livre[(page_affiche-1)*10+row][4])+'"'
-        curseur.execute(requete)
-        connexion.commit()
-        Liste_Livre.pop((page_affiche-1)*10+row)
-        Next_Page()
-    else:
-        pass
-def Previous_Page():
-    """
-    Fonction permettant de gerer le passage a la page précédente dans l'onglet adherent/livre/emprunt
-    """
-    global num_liste_affiche
-    global num_liste_max
-    global Liste_Affiche
-    global Liste_Livre
-    global Liste_Adherent
-    global Liste_Emprunt
-    num_liste_affiche+=-1
-    if page=="adherent":
-        Liste_Affiche=[]
-        for i in range((num_liste_affiche-1)*10,(num_liste_affiche-1)*10+11):
-            Liste_Affiche.append(Liste_Adherent[i])
-        clear_frame()
-        affichage_menu()
-        affichage_liste_adherent()
-    elif page=="livre":
-        Liste_Affiche=[]
-        for i in range((num_liste_affiche-1)*10,(num_liste_affiche-1)*10+11):
-            Liste_Affiche.append(Liste_Livre[i])
-        clear_frame()
-        affichage_menu()
-        affichage_liste_livre()
-    elif page=="emprunt" or page=="retard":
-        Liste_Affiche=[]
-        for i in range((num_liste_affiche-1)*10,(num_liste_affiche-1)*10+11):
-            Liste_Affiche.append(Liste_Emprunt[i])
-        clear_frame()
-        affichage_menu()
-        affichage_liste_emprunts()
-def Next_Page():
-    """
-    Fonction permettant de gerer le passage a la page suivante dans l'onglet adherent/livre/emprunt, cette fonction est également utilisé afin de gerer l'affichage quand la base de données est modifié pour mettre a jour l'affichage a la bonne page
-    """
-    global num_liste_affiche
-    global num_liste_max
-    global Liste_Affiche
-    global Liste_Livre
-    global Liste_Adherent
-    global Liste_Emprunt
-    num_liste_affiche+=1
-    if page=="adherent":
-        num_liste_max=len(Liste_Adherent)//10
-        if len(Liste_Adherent)%10!=0:
-            num_liste_max+=1
-        if num_liste_affiche<num_liste_max:
-            Liste_Affiche=[]
-            for i in range((num_liste_affiche-1)*10,(num_liste_affiche-1)*10+11):
-                Liste_Affiche.append(Liste_Adherent[i])
-        else:
-            Liste_Affiche=[]
-            max= len(Liste_Adherent)%10
-            if max==0:
-                max=10
-            for i in range((num_liste_affiche-1)*10,(num_liste_affiche-1)*10+max):
-                Liste_Affiche.append(Liste_Adherent[i])
-        clear_frame()
-        affichage_menu()
-        affichage_liste_adherent()
-    elif page=="livre":
-        num_liste_max=len(Liste_Livre)//10
-        if len(Liste_Livre)%10!=0:
-            num_liste_max+=1
-        if num_liste_affiche<num_liste_max:
-            Liste_Affiche=[]
-            for i in range((num_liste_affiche-1)*10,(num_liste_affiche-1)*10+11):
-                Liste_Affiche.append(Liste_Livre[i])
-        else:
-            Liste_Affiche=[]
-            max= len(Liste_Livre)%10
-            if max==0:
-                max=10
-            for i in range((num_liste_affiche-1)*10,(num_liste_affiche-1)*10+max):
-                Liste_Affiche.append(Liste_Livre[i])
-        clear_frame()
-        affichage_menu()
-        affichage_liste_livre()
-    elif page=="emprunt" or page=="retard":
-        num_liste_max=len(Liste_Emprunt)//10
-        if len(Liste_Emprunt)%10!=0:
-            num_liste_max+=1
-        if num_liste_affiche<num_liste_max:
-            Liste_Affiche=[]
-            for i in range((num_liste_affiche-1)*10,(num_liste_affiche-1)*10+11):
-                Liste_Affiche.append(Liste_Emprunt[i])
-        else:
-            Liste_Affiche=[]
-            max= len(Liste_Emprunt)%10
-            if max==0:
-                max=10
-            for i in range((num_liste_affiche-1)*10,(num_liste_affiche-1)*10+max):
-                Liste_Affiche.append(Liste_Emprunt[i])
-        clear_frame()
-        affichage_menu()
-        affichage_liste_emprunts()
-def Lim(texte,nbmaxi):
-    """
-    Fonction permettant de gerer le nombre maximum de caractere pour que l'affichage ne soit pas modifier si le titre d'un livre ou l'adresse mail de quelqu'un est trop longue
-    """
-    DicoCarMax = {1:65,2:30,3:30,4:20}
-    NbCarMax=DicoCarMax[nbmaxi]
-    if len(texte)>NbCarMax:
-        return(str(texte[:NbCarMax])+"...")
-    else:
-        return(str(texte))
+        CTkLabel(root, text="", corner_radius=10, height=10, width=10, font=Outfit, fg_color="#0A1437").grid(row=i, column=i)
 
-def sortby(column,table):
-    """
-    Fonction permettant de gerer le tri par ordre croissant par collones
-    """
-    global Liste_Livre
-    global Liste_Adherent
-    global Liste_Emprunt
-    global num_liste_affiche
-    num_liste_affiche+=-1
-    if table!="retard":
-        requete = f"SELECT * from {table} ORDER BY {column}"
-        curseur.execute(requete)
-        connexion.commit()
-        affichage_menu()
-        if table=="livre":
-            Liste_Livre= curseur.fetchall()
-            Next_Page()
-        elif table=="adherent":
-            Liste_Adherent= curseur.fetchall()
-            Next_Page()
-        else:
-            Liste_Emprunt= curseur.fetchall()
-            Next_Page()
-    else:
-        requete = f"SELECT * from emprunt WHERE DATE(DateRetour)<DATE('now') ORDER BY {column}"
-        curseur.execute(requete)
-        Liste_Emprunt= curseur.fetchall()
-        Next_Page()
+def Lim(texte, nbmaxi):
+    if texte is None:
+        return ""
+    dico_car_max = {1: 65, 2: 30, 3: 30, 4: 20}
+    nb_car_max = dico_car_max.get(nbmaxi, 30)
+    str_txt = str(texte)
+    return str_txt[:nb_car_max] + "..." if len(str_txt) > nb_car_max else str_txt
+
 def Edit_Nb_Auteur(string):
-    """
-    Fonction permettant de limiter le nombre d'auteur ou d'editeur à 2 max, si il y en a plus on garde que les 2 premiers (le choix de garder uniquement les 2 premiers à était effectuer avec la documentaliste du CDI qui a conseiller de faire comme ca)
-    """
-    if string.count("'")>=4:
-        n1=string.find("'")
-        n2=string.find("'",n1)
-        n3=string.find("'",n2)
-        n4=string.find("'",n3)
-        return string[:n4]
-    else:
-        return string
-def Ajouter_Livre():
-    """
-    Fonction permettant de récupérer les informations d'un livre et d'appeller la fonction qui gere l'affichage du pop up de confirmations avec les données correspondantes
-    """
-    idlivre= get_id()
-    categorie =EntryCategorie.get()
-    isbn = EntryScanLivre.get()
-    book=meta(isbn)
-    auteur = Edit_Nb_Auteur(str(book.get('Authors'))[2:-2])
-    titre = str(book.get('Title'))
-    editeur = Edit_Nb_Auteur(str(book.get('Publisher')))
-    affichage_confirmation_livre(titre,auteur,categorie,editeur,isbn,idlivre)
-def Ajouter_Adherent():
-    """
-    Fonction permettant de récupérer les informations d'un adherent et d'appeller la fonction qui gere l'affichage du pop up de confirmations avec les données correspondantes
-    """
-    global num_liste_affiche
-    global Liste_Adherent
-    num_liste_affiche+=-1
-    identifiant= get_id()
-    nom = EntryNom.get()
-    prenom = EntryPrenom.get()
-    Mail = EntryMail.get()
-    Telephone = EntryTelephone.get()
-    affichage_confirmation_adherent(nom,prenom,Mail,Telephone,identifiant)
-def Emprunt():
-    """
-    Fonction permettant d'effectuer l'emprunt d'un livre, récupère les données du livre et les ajoute à la liste de livre empruntées
-    """
-    global Liste_Emprunt
-    global num_liste_affiche
-    Id_Livre = EntryScanEmprunt.get()
-    Id_Adherent = EntryAdherentCarte.cget("text")
-    requeteLivre = f'SELECT * FROM livre WHERE isbn="{Id_Livre}"'
-    curseur.execute(requeteLivre)
-    Data_Livre = curseur.fetchone()
-    requeteAdherent = f'SELECT * FROM adherent WHERE identifiant="{Id_Adherent}"'
-    curseur.execute(requeteAdherent)
-    Data_Adherent = curseur.fetchone()
-    print(f'Date Livre : {Data_Livre} \n Data Adherent : {Data_Adherent}')
-    if Data_Livre==None or Data_Adherent == None:
-        print('Information Incorrect')
-    else:
-        Id_Livre=Data_Livre[4]
-        Nom_Livre=Data_Livre[1]
-        Date=today_date
-        Date_Retour=today_date+td
-        Id_Adherent=Data_Adherent[0]
-        Nom_Adherent=Data_Adherent[1]
-        Prenom_Adherent=Data_Adherent[2]
-        Auteurs=Data_Livre[2]
-        requete=f'INSERT INTO emprunt(NumLivre,NomLivre,DateEmprunt,DateRetour,Identifiant,NomAdherent,PrenomAdherent,Auteur) values("{Id_Livre}","{Nom_Livre}","{Date}","{Date_Retour}","{Id_Adherent}","{Nom_Adherent}","{Prenom_Adherent}","{Auteurs}")'
-        curseur.execute(requete)
-        connexion.commit()
-        curseur.execute("SELECT * FROM emprunt")
-        Liste_Emprunt = curseur.fetchall()
-        num_liste_affiche-=1
-        Next_Page()
-def Retour():
-    """
-    Fonction permettant d'effectuer le retours d'un livre, récupère les données du livre et les supprime de la liste de livre empruntées
-    """
-    global Liste_Emprunt
-    global num_liste_affiche
-    Id_Livre = EntryScanEmprunt.get()
-    Id_Adherent = EntryAdherentCarte.cget("text")
-    requeteLivre = f'SELECT * FROM livre WHERE isbn="{Id_Livre}"'
-    curseur.execute(requeteLivre)
-    Data_Livre = curseur.fetchone()
-    Id_Livre = Data_Livre[4]
-    requeteAdherent = f'SELECT * FROM adherent WHERE identifiant="{Id_Adherent}"'
-    curseur.execute(requeteAdherent)
-    Data_Adherent = curseur.fetchone()
-    print(f'Date Livre : {Data_Livre} \n Data Adherent : {Data_Adherent}')
-    if Data_Livre==None or Data_Adherent == None:
-        print('Information Incorrect')
-    else:
-        requete=f'DELETE FROM emprunt WHERE NumLivre="{Id_Livre}" AND Identifiant="{Id_Adherent}"'
-        curseur.execute(requete)
-        connexion.commit()
-        curseur.execute("SELECT * FROM emprunt")
-        Liste_Emprunt = curseur.fetchall()
-        num_liste_affiche-=1
-        Next_Page()
-def RechercherAdherent():
-    """
-    Fonction permettant d'afficher uniquement les adherents résultat de la recherche, récupère ce que la personne souhaite recherché dans une entry de l'onglet adherent et à l'aide d'une requête sql et de like %str% permet de savoir si l'une des données contient ce qui est dans le recherche et de l'ajouter a la liste si oui
-    """
-    global num_liste_affiche
-    global Liste_Adherent
-    DataRecherche = EntryRechercheAdherent.get()
-    requete='SELECT * FROM adherent WHERE nomAdherent like "%'+str(DataRecherche)+'%" OR prenomAdherent like "%'+str(DataRecherche)+'%" OR Mail like "%'+str(DataRecherche)+'%" OR telephone like "%'+str(DataRecherche)+'%"'
-    curseur.execute(requete)
-    Liste_Adherent = curseur.fetchall()
-    if Liste_Adherent!=[]:
-        num_liste_affiche+=-1
-        Next_Page()
-    else:
-        print('Aucun résultat !')
-        requete= "SELECT * FROM adherent"
-        curseur.execute(requete)
-        Liste_Adherent = curseur.fetchall()
-def RechercherLivre():
-    """
-    Fonction permettant d'afficher uniquement les livres résultat de la recherche, récupère ce que la personne souhaite recherché dans une entry de l'onglet livre et à l'aide d'une requête sql et de like %str% permet de savoir si l'une des données contient ce qui est dans le recherche et de l'ajouter a la liste si oui
-    """
-    global num_liste_affiche
-    global Liste_Livre
-    DataRecherche = EntryRechercheLivre.get()
-    requete='SELECT * FROM livre WHERE isbn like "%'+str(DataRecherche)+'%" OR titre like "%'+str(DataRecherche)+'%" OR auteur like "%'+str(DataRecherche)+'%" OR idlivre like "%'+str(DataRecherche)+'%" OR editeur like "%'+str(DataRecherche)+'%"'
-    curseur.execute(requete)
-    Liste_Livre = curseur.fetchall()
-    if Liste_Livre!=[]:
-        num_liste_affiche+=-1
-        Next_Page()
-    else:
-        print('Aucun résultat !')
-        requete= "SELECT * FROM livre"
-        curseur.execute(requete)
-        Liste_Livre = curseur.fetchall()
-def RechercherEmprunt():
-    """
-    Fonction permettant d'afficher uniquement les livres empruntés résultat de la recherche, récupère ce que la personne souhaite recherché dans une entry de l'onglet emprunt et à l'aide d'une requête sql et de like %str% permet de savoir si l'une des données contient ce qui est dans le recherche et de l'ajouter a la liste si oui
-    """
-    global num_liste_affiche
-    global Liste_Emprunt
-    global page
-    DataRecherche = EntryRechercheEmprunt.get()
-    if page=="retard":
-        requete='SELECT * FROM emprunt WHERE DATE(DateRetour)<DATE("now") AND nomlivre like "%'+str(DataRecherche)+'%" OR Auteur like "%'+str(DataRecherche)+'%" OR NomAdherent like "%'+str(DataRecherche)+'%" OR PrenomAdherent like "%'+str(DataRecherche)+'%" OR DateRetour like "%'+str(DataRecherche)+'%"'
-    elif page=="emprunt":
-        requete='SELECT * FROM emprunt WHERE nomlivre like "%'+str(DataRecherche)+'%" OR Auteur like "%'+str(DataRecherche)+'%" OR NomAdherent like "%'+str(DataRecherche)+'%" OR PrenomAdherent like "%'+str(DataRecherche)+'%" OR DateRetour like "%'+str(DataRecherche)+'%"'
-    curseur.execute(requete)
-    Liste_Emprunt = curseur.fetchall()
-    if Liste_Emprunt!=[]:
-        num_liste_affiche+=-1
-        Next_Page()
-    else:
-        print('Aucun résultat !')
-        requete= "SELECT * FROM livre"
-        curseur.execute(requete)
-        Liste_Emprunt = curseur.fetchall()
-def Retard():
-    """
-    Fonction permettant de mettre à jour la liste affiché dans l'onglet emprunt pour afficher uniquement les livres en retard ou de nouveau tout les livres empruntés
-    """
-    global page
-    global Liste_Emprunt
-    global num_liste_affiche
-    if page=="emprunt":
-        page="retard"
-        curseur.execute("SELECT * FROM emprunt WHERE DATE(DateRetour)<DATE('now')")
-        Liste_Emprunt = curseur.fetchall()
-        num_liste_affiche-=1
-        Next_Page()
-    elif page=="retard":
-        page="emprunt"
-        curseur.execute("SELECT * FROM emprunt")
-        Liste_Emprunt = curseur.fetchall()
-        num_liste_affiche-=1
-        Next_Page()
-def annuler():
-    """
-    Fonction permettant de fermer un pop up de confirmation (lors de l'ajout d'un adherent ou d'un livre)
-    """
-    global root_annexe
-    root_annexe.destroy()
-def addlivre(idlivre,isbn,titre,auteur,editeur,categorie):
-    """
-    Fonction permettant d'ajouter un livre dans la base de données (récupère les infos du pop up de la fonction affichage_confirmation_livre()
-    """
-    global Liste_Livre
-    global num_liste_affiche
-    global root_annexe
-    global EntryISBN
-    global EntryTitre_Livre
-    global EntryAuteur
-    global EntryEditeur
-    global EntryCategorie
-    if EntryISBN.get()!="":
-        isbn=EntryISBN.get()
-    if EntryTitre_Livre.get()!="":
-        titre=EntryTitre_Livre.get()
-    if EntryAuteur.get()!="":
-        auteur= EntryAuteur.get()
-    if EntryEditeur.get()!="":
-        editeur=EntryEditeur.get()
-    if EntryCategorie.get()!="":
-        categorie=EntryCategorie.get()
-    num_liste_affiche+=-1
-    requete='INSERT INTO livre(isbn,titre,auteur,editeur,idlivre,categorie) VALUES("'+str(isbn)+'","'+str(titre)+'","'+str(auteur)+'","'+str(editeur)+'","'+str(idlivre)+'","'+str(categorie)+'")'
-    curseur.execute(requete)
-    connexion.commit()
-    curseur.execute("SELECT * FROM livre")
-    Liste_Livre = curseur.fetchall()
-    Next_Page()
-    root_annexe.destroy()
-def addadherent(nom,prenom,Mail,telephone,identifiant):
-    """
-    Fonction permettant d'ajouter un adherent dans la base de données (récupère les infos du pop up de la fonction affichage_confirmation_adherent()
-    """
-    global Liste_Adherent
-    global num_liste_affiche
-    global root_annexe
-    global EntryNom
-    global EntryPrenom
-    global EntryMail
-    global EntryTel
-    global EntryId
-    if EntryNom.get()!="":
-        nom=EntryNom.get()
-    if EntryPrenom.get()!="":
-        prenom=EntryPrenom.get()
-    if EntryMail.get()!="":
-        Mail= EntryMail.get()
-    if EntryTel.get()!="":
-        telephone=EntryTel.get()
-    if EntryId.get()!="":
-        identifiant=EntryId.get()
-    requete='INSERT INTO adherent(nomAdherent,prenomAdherent,Mail,telephone,identifiant) VALUES("'+str(nom)+'","'+str(prenom)+'","'+str(Mail)+'","'+str(telephone)+'","'+str(identifiant)+'")'
-    curseur.execute(requete)
-    connexion.commit()
-    requete="SELECT * FROM adherent"
-    curseur.execute(requete)
-    connexion.commit()
-    root_annexe.destroy()
-    ChangementAdherent()
-def affichage_confirmation_livre(titre,auteur,categorie,editeur,isbn,idlivre):
-    """
-    Fonction permettant d'afficher le pop up de confirmation d'un livre sur une autre fenetre
-    """
-    global root_annexe
-    global EntryISBN
-    global EntryTitre_Livre
-    global EntryAuteur
-    global EntryEditeur
-    global EntryCategorie
-    try:
-        root_annexe.destroy()
-    except:
-        pass
-    root_annexe =Tk()
-    root_annexe.geometry("440x500") #1920x1332
-    root_annexe.title("Bibliotech")
-    root_annexe.configure(bg='#0A1437')
-    root_annexe.resizable(False, False)
-    LabelEspace_CL0 = CTkLabel(root_annexe, text="",corner_radius=10,height=20,width=10,font=Outfit,fg_color="#0A1437").grid(row=0,column=0)
-    LabelSimple = CTkLabel(root_annexe, text="",corner_radius=10,height=450,width=400,font=Outfit,text_color="#1C1C1E",fg_color="white").grid(row=1,rowspan=15,column=1,columnspan=4,sticky="n")
-    Label_Titre = CTkLabel(root_annexe, text="Confirmation d'ajout", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold).grid(row=1,column=1,sticky="sw",padx=(20,0),pady=(10,20))
-    LabelTitre_Livre = CTkLabel(root_annexe, text="Titre", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,height=20).grid(row=2,column=1,sticky="sw",padx=(20,0))
-    EntryTitre_Livre = CTkEntry(root_annexe, placeholder_text=titre,placeholder_text_color="#7882A5",width=350,corner_radius=10,height= 40,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryTitre_Livre.grid(row=3,column=1,sticky="nw",padx=(20,0))
-    LabelAuteur = CTkLabel(root_annexe, text="Auteur", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,height=20).grid(row=4,column=1,sticky="sw",padx=(20,0))
-    EntryAuteur = CTkEntry(root_annexe, placeholder_text=auteur,placeholder_text_color="#7882A5",width=350,corner_radius=10,height= 40,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryAuteur.grid(row=5,column=1,sticky="nw",padx=(20,0))
-    Labelcategorie = CTkLabel(root_annexe, text="Catégorie", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,height=20).grid(row=6,column=1,sticky="sw",padx=(20,0))
-    EntryCategorie = CTkEntry(root_annexe, placeholder_text=categorie,placeholder_text_color="#7882A5",width=350,corner_radius=10,height= 40,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryCategorie.grid(row=7,column=1,sticky="nw",padx=(20,0))
-    LabelEditeur = CTkLabel(root_annexe, text="Éditeur", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,height=20).grid(row=8,column=1,sticky="sw",padx=(20,0))
-    EntryEditeur = CTkEntry(root_annexe, placeholder_text=editeur,placeholder_text_color="#7882A5",width=350,corner_radius=10,height= 40,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryEditeur.grid(row=9,column=1,sticky="nw",padx=(20,0))
-    LabelISBN = CTkLabel(root_annexe, text="ISBN", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,height=20).grid(row=10,column=1,sticky="sw",padx=(20,0))
-    EntryISBN = CTkEntry(root_annexe, placeholder_text=isbn,placeholder_text_color="#7882A5",width=350,corner_radius=10,height= 40,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryISBN.grid(row=11,column=1,sticky="nw",padx=(20,0))
-    LabelEspace_CL1 = CTkLabel(root_annexe,text_color="#1C1C1E",fg_color="#1C1C1E",bg_color="#1C1C1E",text="").grid(row=12,column=0)
-    BouttonAnnuler = CTkButton(root_annexe, text="ANNULER",corner_radius=20,height= 50,width=87,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=annuler).grid(row=14,column=1,columnspan=2,sticky="w",padx=(10,0),pady=(0,10))
-    BouttonAjouter = CTkButton(root_annexe, text="AJOUTER",corner_radius=20,height= 50,width=87,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=lambda :addlivre(idlivre,isbn,titre,auteur,editeur,categorie)).grid(row=14,column=1,columnspan=4,sticky="e",padx=(0,10),pady=(0,10))
-    root_annexe.mainloop()
-def scanadh():
-    """
-    Fonction permettant de mettre à jour le contenu de la variable identifiant et de l'afficher dans les entrys/labels
-    """
-    global identifiant
-    new_id=get_id()
-    identifiant=new_id
-    if page=="livre":
-        global EntryId
-        EntryId.configure(placeholder_text=identifiant)
-    if page=="emprunt" or page=="retard":
-        global EntryAdherentCarte
-        EntryAdherentCarte.configure(text=str(identifiant))
-def affichage_confirmation_adherent(nom,prenom,Mail,telephone,identifiant):
-    """
-    Fonction permettant d'afficher le pop up de confirmation d'un adherent sur une autre fenetre
-    """
-    global root_annexe
-    global EntryNom
-    global EntryPrenom
-    global EntryMail
-    global EntryTel
-    global EntryId
-    try:
-        root_annexe.destroy()
-    except:
-        pass
-    root_annexe =Tk()
-    root_annexe.geometry("440x500") #1920x1332
-    root_annexe.title("Bibliotech")
-    root_annexe.configure(bg='#0A1437')
-    root_annexe.resizable(False, False)
-    LabelEspace_CA0 = CTkLabel(root_annexe, text="",corner_radius=10,height=20,width=10,font=Outfit,fg_color="#0A1437").grid(row=0,column=0)
-    LabelSimple = CTkLabel(root_annexe, text="",corner_radius=10,height=450,width=400,font=Outfit,text_color="#1C1C1E",fg_color="white").grid(row=1,rowspan=15,column=1,columnspan=4,sticky="n")
-    Label_Titre = CTkLabel(root_annexe, text="Confirmation d'ajout", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold).grid(row=1,column=1,sticky="sw",padx=(20,0),pady=(10,20))
-    LabelNom = CTkLabel(root_annexe, text="Nom", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,height=20).grid(row=2,column=1,sticky="sw",padx=(20,0))
-    EntryNom = CTkEntry(root_annexe, placeholder_text=nom,placeholder_text_color="#7882A5",width=350,corner_radius=10,height= 40,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryNom.grid(row=3,column=1,sticky="nw",padx=(20,0))
-    LabelPrenom = CTkLabel(root_annexe, text="Prenom", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,height=20).grid(row=4,column=1,sticky="sw",padx=(20,0))
-    EntryPrenom = CTkEntry(root_annexe, placeholder_text=prenom,placeholder_text_color="#7882A5",width=350,corner_radius=10,height= 40,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryPrenom.grid(row=5,column=1,sticky="nw",padx=(20,0))
-    LabelMail = CTkLabel(root_annexe, text="Mail", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,height=20).grid(row=6,column=1,sticky="sw",padx=(20,0))
-    EntryMail = CTkEntry(root_annexe, placeholder_text=Mail,placeholder_text_color="#7882A5",width=350,corner_radius=10,height= 40,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryMail.grid(row=7,column=1,sticky="nw",padx=(20,0))
-    LabelTel = CTkLabel(root_annexe, text="Téléphone", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,height=20).grid(row=8,column=1,sticky="sw",padx=(20,0))
-    EntryTel = CTkEntry(root_annexe, placeholder_text=telephone,placeholder_text_color="#7882A5",width=350,corner_radius=10,height= 40,font=Outfit,text_color="#1C1C1E",fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryTel.grid(row=9,column=1,sticky="nw",padx=(20,0))
-    LabelId = CTkLabel(root_annexe, text="Identifiant", text_color="#1C1C1E",fg_color="white",bg_color="white",font=OutfitBold,height=20).grid(row=10,column=1,sticky="sw",padx=(20,0))
-    EntryId = CTkEntry(root_annexe,placeholder_text=identifiant,text_color="#1C1C1E",placeholder_text_color="#7882A5",width=270,corner_radius=10,height= 40,font=Outfit,fg_color="#E5EAF8",bg_color="white",border_width=0)
-    EntryId.grid(row=11,column=1,sticky="nw",padx=(20,0))
-    BouttonScan = CTkButton(root_annexe, text="SCAN",corner_radius=10,height= 40,width=70,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=scanadh).grid(row=11,column=1,columnspan=4,sticky="e",padx=(0,30),pady=(0,10))
-    LabelEspace_CA1 = CTkLabel(root_annexe,text_color="#1C1C1E",fg_color="#1C1C1E",bg_color="#1C1C1E",text="").grid(row=12,column=0)
-    BouttonAnnuler = CTkButton(root_annexe, text="ANNULER",corner_radius=10,height= 40,width=87,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=annuler).grid(row=14,column=1,columnspan=2,sticky="w",padx=(20,0),pady=(0,10))
-    BouttonAjouter = CTkButton(root_annexe, text="AJOUTER",corner_radius=10,height= 40,width=87,font=Outfit,text_color="#1C1C1E",fg_color="#BAC8EB",bg_color="white",hover=False,command=lambda :addadherent(nom,prenom,Mail,telephone,identifiant)).grid(row=14,column=1,columnspan=4,sticky="e",padx=(0,10),pady=(0,10))
-    root_annexe.mainloop()
-def wait():
-    """
-    Fonction permettant d'afficher un message d'attente du scan d'une carte a l'aide du lecteur NFC
-    """
-    clear_frame()
-    root.geometry("325x125")
+    if not string:
+        return ""
+    if string.count("'") >= 4:
+        n1 = string.find("'")
+        n2 = string.find("'", n1 + 1)
+        n3 = string.find("'", n2 + 1)
+        n4 = string.find("'", n3 + 1)
+        if n4 != -1:
+            return string[:n4]
+    return string
 
-    LabelWait=CTkLabel(root,text="En attente d'un badge NFC . . .",corner_radius=10,font=OutfitBold,text_color="white",fg_color="#0A1437").grid(row=1,column=1,padx=(40,0),pady=(35,0))
-    LabelWait=CTkLabel(root,text="Merci de scanner un livre ou une carte",corner_radius=10,font=OutfitPlus,text_color="white",fg_color="#0A1437").grid(row=2,column=1,padx=(30,0))
-def get_id():
-    """
-    Fonction renvoyant le contenu d'un badge NFC à l'aide du lecteur NFC mais ne permet pas de faire autre chose une fois lancer, si on ne scan pas de carte le programme est a l'arrêt, en commentaire il y a une version permettant d'afficher un pop up indiquant qu'il faut passer un badge pour plus de clarté hors ca ne marche pas correctement dans cela n'a pas était laissez
-    """
-    global page
-    #wait()  pour afficher un pop up d'attente de scan mais ca marche pas
-    while True:
-        try:
-            reader = nfc.Reader()
-            data = reader.get_uid()
-            if data:
-                """
-                permettant de remettre la bonne page après le pop up mais ca marche pas (techniquement ca si mais ca affiche pas le truc d'avant a cause du while true)
-                clear_frame()
-                if page=="adherent":
-                    ChangementAdherent()
-                elif page=="livre":
-                    ChangementLivre()
-                else:
-                    ChangementEmprunts()
-                """
-                return(data)
-        except:
-            pass
+def affichage_menu():
+    CTkLabel(root, text="", corner_radius=10, height=10, width=20, font=Outfit, text_color="#1C1C1E", fg_color="#0A1437").grid(row=0, column=0)
+    CTkLabel(root, text="BIBLIOTECH", corner_radius=10, height=19, width=120, font=OutfitTitle, text_color="white", fg_color="#0A1437").grid(row=2, column=1)
+    CTkLabel(root, text="", corner_radius=10, height=10, width=216, font=Outfit, text_color="#1C1C1E", fg_color="#0A1437").grid(row=2, column=2)
+    
+    CTkLabel(root, text="", corner_radius=33, height=55, width=285, font=Outfit, text_color="white", fg_color="white").grid(row=1, rowspan=3, column=3, columnspan=3)
+    
+    adh_color = "#BAC8EB" if page == "adherent" else "white"
+    livre_color = "#BAC8EB" if page == "livre" else "white"
+    emp_color = "#BAC8EB" if page in ("emprunt", "retard") else "white"
+
+    CTkButton(root, text="ADHERENT", corner_radius=20, height=35, width=92, font=Outfit, text_color="#1C1C1E", fg_color=adh_color, bg_color="white", hover=False, command=ChangementAdherent).grid(row=2, column=3, sticky="e")
+    CTkButton(root, text="LIVRE", corner_radius=20, height=35, width=61, font=Outfit, text_color="#1C1C1E", fg_color=livre_color, bg_color="white", hover=False, command=ChangementLivre).grid(row=2, column=4)
+    CTkButton(root, text="EMPRUNT", corner_radius=20, height=35, width=79, font=Outfit, text_color="#1C1C1E", fg_color=emp_color, bg_color="white", hover=False, command=ChangementEmprunts).grid(row=2, column=5, sticky="w")
+    
+    CTkLabel(root, text="", corner_radius=10, height=10, width=230, font=Outfit, text_color="#1C1C1E", fg_color="#0A1437").grid(row=1, column=6, columnspan=2)
+    CTkButton(root, text="QUITTER", corner_radius=20, height=50, width=87, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", hover=False, command=Quitter).grid(row=1, rowspan=3, column=8, columnspan=2)
+
+def affichage_liste_adherent():
+    global EntryNom, EntryPrenom, EntryMail, EntryTelephone, EntryRechercheAdherent
+    
+    CTkLabel(root, text="", corner_radius=10, height=30, font=Outfit, fg_color="#0A1437").grid(row=4, column=0)
+    CTkLabel(root, text="", corner_radius=15, height=70, width=1025, font=Outfit, text_color="white", fg_color="white").grid(row=5, rowspan=3, column=1, columnspan=10)
+    
+    EntryNom = CTkEntry(root, placeholder_text="Nom", placeholder_text_color="#7882A5", width=180, corner_radius=10, height=50, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryNom.grid(row=6, column=1, padx=(20, 0))
+    EntryPrenom = CTkEntry(root, placeholder_text="Prenom", placeholder_text_color="#7882A5", corner_radius=10, height=50, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", width=180, border_width=0)
+    EntryPrenom.grid(row=6, column=2)
+    EntryMail = CTkEntry(root, placeholder_text="Mail", placeholder_text_color="#7882A5", corner_radius=10, height=50, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", width=180, border_width=0)
+    EntryMail.grid(row=6, column=3, columnspan=2)
+    EntryTelephone = CTkEntry(root, placeholder_text="Telephone", placeholder_text_color="#7882A5", corner_radius=10, height=50, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", width=180, border_width=0)
+    EntryTelephone.grid(row=6, column=5, columnspan=2, padx=(20, 0))
+    CTkButton(root, text="AJOUTER", corner_radius=20, height=50, width=87, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", bg_color="white", hover=False, command=Ajouter_Adherent).grid(row=6, column=8, columnspan=2)
+    
+    CTkLabel(root, text="", corner_radius=15, height=70, width=600, font=Outfit, text_color="white", fg_color="white").grid(row=9, rowspan=3, column=1, columnspan=4)
+    EntryRechercheAdherent = CTkEntry(root, placeholder_text="Rechercher un Adherent", placeholder_text_color="#7882A5", corner_radius=10, height=50, width=380, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryRechercheAdherent.grid(row=10, column=1, columnspan=2)
+    CTkButton(root, text="RECHERCHER", corner_radius=20, height=50, width=87, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", bg_color="white", hover=False, command=RechercherAdherent).grid(row=10, column=3, columnspan=2, sticky="e", padx=(0, 20))
+    
+    display_count = len(Liste_Affiche)
+    hauteur_deca = 50 + 55 * display_count if display_count > 0 else 100
+    CTkLabel(root, text="", corner_radius=15, height=hauteur_deca, width=1025, font=Outfit, text_color="white", fg_color="white").grid(row=13, rowspan=22, column=1, columnspan=10, sticky="n")
+    
+    CTkButton(root, text="Nom >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("nomAdherent", "adherent")).grid(row=13, column=1, pady=10, sticky="w", padx=(25, 0))
+    CTkButton(root, text="Prenom >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("prenomAdherent", "adherent")).grid(row=13, column=2, pady=10, sticky="w", padx=(10, 0))
+    CTkButton(root, text="Mail >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("Mail", "adherent")).grid(row=13, column=3, columnspan=2, pady=10, sticky="w", padx=(10, 0))
+    CTkButton(root, text="Telephone >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("telephone", "adherent")).grid(row=13, column=5, columnspan=2, pady=10, sticky="w", padx=(10, 0))
+    CTkButton(root, text="Identifiant >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("identifiant", "adherent")).grid(row=13, column=7, columnspan=2, pady=10, sticky="w", padx=(10, 0))
+    CTkProgressBar(root, height=1, width=1040, fg_color="#E6E6E6", progress_color="#E6E6E6", border_width=0).grid(row=14, column=1, columnspan=10)
+    
+    for i, item in enumerate(Liste_Affiche):
+        CTkLabel(root, wraplength=180, text=Lim(item[1], 2), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=1, sticky="w", padx=(25, 0))
+        CTkLabel(root, wraplength=180, text=Lim(item[2], 2), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=2, sticky="w", padx=(10, 0))
+        CTkLabel(root, wraplength=180, text=Lim(item[3], 2), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=3, columnspan=2, sticky="w", padx=(10, 0))
+        CTkLabel(root, wraplength=180, text=Lim(item[4], 3), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=5, columnspan=2, sticky="w", padx=(10, 0))
+        CTkLabel(root, wraplength=180, text=Lim(str(item[0]), 4), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=7, columnspan=2, sticky="w", padx=(10, 0))
+        CTkButton(root, bg_color="white", fg_color="white", hover_color="red", text="", image=Image_Poubelle, width=15, height=15, command=lambda row=i, p=num_liste_affiche: delete(row, p)).grid(row=15 + 2 * i, column=7, columnspan=3, sticky="e", padx=(0, 20))
+        if i != display_count - 1:
+            CTkProgressBar(root, height=1, width=1040, fg_color="#E6E6E6", progress_color="#E6E6E6", border_width=0).grid(row=16 + 2 * i, column=1, columnspan=10)
+    
+    if num_liste_affiche > 1:
+        CTkButton(root, bg_color="white", fg_color="white", text="", image=Image_Previous_Page, width=15, height=15, hover_color="#BAC8EB", command=Previous_Page).grid(row=13, column=8)
+    if num_liste_affiche < num_liste_max:
+        CTkButton(root, bg_color="white", fg_color="white", text="", image=Image_Next_Page, width=15, height=15, hover_color="#BAC8EB", command=Next_Page).grid(row=13, column=9, sticky="w")
+
+def affichage_liste_livre():
+    global EntryScanLivre, EntryCategorie, EntryRechercheLivre
+    
+    CTkLabel(root, text="", corner_radius=10, height=30, font=Outfit, fg_color="#0A1437").grid(row=4, column=0)
+    CTkLabel(root, text="", corner_radius=15, height=70, width=715, font=Outfit, text_color="white", fg_color="white").grid(row=5, rowspan=3, column=1, columnspan=5, sticky="w")
+    
+    EntryScanLivre = CTkEntry(root, placeholder_text="ISBN du livre", placeholder_text_color="#7882A5", width=400, corner_radius=10, height=50, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryScanLivre.grid(row=6, column=1, columnspan=2, sticky="w", padx=(10, 0))
+    EntryCategorie = CTkEntry(root, placeholder_text="Categorie", placeholder_text_color="#7882A5", corner_radius=10, height=50, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", width=180, border_width=0)
+    EntryCategorie.grid(row=6, column=2, columnspan=3, padx=(0, 15), sticky="e")
+    CTkButton(root, text="AJOUTER", corner_radius=20, height=50, width=87, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", bg_color="white", hover=False, command=Ajouter_Livre).grid(row=6, column=5, padx=(0, 25), sticky="w")
+    
+    CTkLabel(root, text="", corner_radius=15, height=70, width=600, font=Outfit, text_color="white", fg_color="white").grid(row=9, rowspan=3, column=1, columnspan=4, padx=(0, 20))
+    EntryRechercheLivre = CTkEntry(root, placeholder_text="Rechercher un livre", placeholder_text_color="#7882A5", corner_radius=10, height=50, width=380, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryRechercheLivre.grid(row=10, column=1, columnspan=2, sticky="w", padx=(10, 0))
+    CTkButton(root, text="RECHERCHER", corner_radius=20, height=50, width=87, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", bg_color="white", hover=False, command=RechercherLivre).grid(row=10, column=3, columnspan=2, sticky="e", padx=(0, 30))
+    
+    display_count = len(Liste_Affiche)
+    hauteur_deca = 50 + 55 * display_count if display_count > 0 else 100
+    CTkLabel(root, text="", corner_radius=15, height=hauteur_deca, width=1035, font=Outfit, text_color="white", fg_color="white").grid(row=13, rowspan=22, column=1, columnspan=10, sticky="n", padx=(0, 25))
+    
+    CTkButton(root, text="ISBN >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("isbn", "livre")).grid(row=13, column=1, pady=10, sticky="w", padx=(5, 0))
+    CTkButton(root, text="Titre >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("titre", "livre")).grid(row=13, column=1, columnspan=2, padx=(100, 0), sticky="w")
+    CTkButton(root, text="Auteur >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("auteur", "livre")).grid(row=13, column=3, columnspan=2, pady=10, sticky="w", padx=(10, 0))
+    CTkButton(root, text="Editeur >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("editeur", "livre")).grid(row=13, column=5, columnspan=2, pady=10, sticky="w", padx=(10, 0))
+    CTkButton(root, text="Categorie >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("categorie", "livre")).grid(row=13, column=7, columnspan=2, pady=10, sticky="w", padx=(0, 0))
+    CTkProgressBar(root, height=1, width=1060, fg_color="#E6E6E6", progress_color="#E6E6E6", border_width=0).grid(row=14, column=1, columnspan=10)
+    
+    for i, item in enumerate(Liste_Affiche):
+        CTkLabel(root, text=Lim(item[0], 4), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=1, sticky="w", padx=(15, 0))
+        CTkLabel(root, text=Lim(item[1], 1), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=1, columnspan=2, padx=(100, 0), sticky="w")
+        CTkLabel(root, text=Lim(item[2], 2), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=3, columnspan=2, sticky="w", padx=(10, 0))
+        CTkLabel(root, text=Lim(item[3], 3), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=5, columnspan=2, sticky="w", padx=(10, 0))
+        cat_val = item[6] if len(item) > 6 else ""
+        CTkLabel(root, text=Lim(cat_val, 4), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=7, columnspan=2, sticky="w", padx=(10, 0))
+        CTkButton(root, bg_color="white", fg_color="white", hover_color="red", text="", image=Image_Poubelle, width=15, height=15, command=lambda row=i, p=num_liste_affiche: delete(row, p)).grid(row=15 + 2 * i, column=7, columnspan=3, sticky="e", padx=(0, 20))
+        if i != display_count - 1:
+            CTkProgressBar(root, height=1, width=1060, fg_color="#E6E6E6", progress_color="#E6E6E6", border_width=0).grid(row=16 + 2 * i, column=1, columnspan=10)
+    
+    if num_liste_affiche > 1:
+        CTkButton(root, bg_color="white", fg_color="white", text="", image=Image_Previous_Page, width=15, height=15, hover_color="#BAC8EB", command=Previous_Page).grid(row=13, column=8, columnspan=2, sticky="w")
+    if num_liste_affiche < num_liste_max:
+        CTkButton(root, bg_color="white", fg_color="white", text="", image=Image_Next_Page, width=15, height=15, hover_color="#BAC8EB", command=Next_Page).grid(row=13, column=8, columnspan=2)
+
+def affichage_liste_emprunts():
+    global EntryScanEmprunt, EntryAdherentCarte, EntryRechercheEmprunt
+    
+    CTkLabel(root, text="", corner_radius=10, height=30, font=Outfit, fg_color="#0A1437").grid(row=4, column=0)
+    CTkLabel(root, text="", corner_radius=15, height=70, width=1025, font=Outfit, text_color="white", fg_color="white").grid(row=5, rowspan=3, column=1, columnspan=10, sticky="w")
+    
+    EntryScanEmprunt = CTkEntry(root, placeholder_text="Scannez le NFC ou entrez ISBN", placeholder_text_color="#7882A5", width=370, corner_radius=10, height=50, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryScanEmprunt.grid(row=6, column=1, columnspan=3, padx=(10, 0), sticky="w")
+    EntryAdherentCarte = CTkEntry(root, placeholder_text="Identifiant de l'adherent", placeholder_text_color="#7882A5", corner_radius=10, height=50, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", width=370, border_width=0)
+    EntryAdherentCarte.grid(row=6, column=2, columnspan=6, sticky="w", padx=(190, 0))
+    CTkButton(root, text="RETOUR", corner_radius=20, height=50, width=110, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", bg_color="white", hover=False, command=Retour).grid(row=6, column=6, columnspan=4, padx=(0, 130), sticky="e")
+    CTkButton(root, text="AJOUTER", corner_radius=20, height=50, width=110, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", bg_color="white", hover=False, command=Emprunt).grid(row=6, column=7, columnspan=3, padx=(0, 10), sticky="e")
+    
+    CTkLabel(root, text="", corner_radius=15, height=70, width=600, font=Outfit, text_color="white", fg_color="white").grid(row=9, rowspan=3, column=1, columnspan=4, padx=(0, 10))
+    EntryRechercheEmprunt = CTkEntry(root, placeholder_text="Rechercher un Emprunt", placeholder_text_color="#7882A5", corner_radius=10, height=50, width=380, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryRechercheEmprunt.grid(row=10, column=1, columnspan=2, padx=(0, 10))
+    CTkButton(root, text="RECHERCHER", corner_radius=20, height=50, width=87, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", bg_color="white", hover=False, command=RechercherEmprunt).grid(row=10, column=3, columnspan=2, sticky="e", padx=(0, 20))
+    
+    btn_retard_text = "Tous les emprunts" if page == "retard" else "Livres en retard"
+    CTkButton(root, text=btn_retard_text, corner_radius=15, height=30, width=125, font=Outfit, text_color="#1C1C1E", fg_color="white", hover=False, command=Retard).grid(row=9, rowspan=3, column=7, columnspan=3, padx=(90, 0))
+    
+    display_count = len(Liste_Affiche)
+    hauteur_deca = 50 + 55 * display_count if display_count > 0 else 100
+    CTkLabel(root, text="", corner_radius=15, height=hauteur_deca, width=1025, font=Outfit, text_color="white", fg_color="white").grid(row=13, rowspan=22, column=1, columnspan=10, sticky="wn")
+    
+    table_name = page
+    CTkButton(root, text="Livre >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("NomLivre", table_name)).grid(row=13, column=1, pady=10, sticky="w", padx=(25, 0))
+    CTkButton(root, text="Auteur >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("Auteur", table_name)).grid(row=13, column=2, pady=10, sticky="w", padx=(10, 0))
+    CTkButton(root, text="Nom Adherent >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("NomAdherent", table_name)).grid(row=13, column=3, columnspan=2, pady=10, sticky="w", padx=(10, 0))
+    CTkButton(root, text="Prenom >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("PrenomAdherent", table_name)).grid(row=13, column=5, columnspan=2, pady=10, sticky="w", padx=(10, 0))
+    CTkButton(root, text="Retour >", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, hover=False, command=lambda: sortby("DateRetour", table_name)).grid(row=13, column=7, columnspan=2, pady=10, sticky="w", padx=(10, 0))
+    CTkProgressBar(root, height=1, width=1040, fg_color="#E6E6E6", progress_color="#E6E6E6", border_width=0).grid(row=14, column=1, columnspan=10)
+    
+    for i, item in enumerate(Liste_Affiche):
+        CTkLabel(root, wraplength=180, text=Lim(item[1], 1), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=1, sticky="nw", padx=(25, 0))
+        CTkLabel(root, wraplength=180, text=Lim(item[7], 2), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=2, sticky="nw", padx=(10, 0))
+        CTkLabel(root, wraplength=180, text=Lim(item[6], 2), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=3, columnspan=2, sticky="nw", padx=(10, 0))
+        CTkLabel(root, wraplength=180, text=Lim(item[8], 2), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=5, columnspan=2, sticky="nw", padx=(10, 0))
+        date_retour_str = str(item[3])
+        CTkLabel(root, wraplength=180, text=Lim(date_retour_str, 4), text_color="#1C1C1E", fg_color="white", bg_color="white", height=40, font=Outfit).grid(row=15 + 2 * i, column=7, columnspan=2, sticky="nw", padx=(10, 0))
+        
+        if date_retour_str <= str(today_date):
+            CTkButton(root, bg_color="white", fg_color="white", hover_color="red", text="", image=Image_Retard, width=15, height=15, command=lambda row=i, p=num_liste_affiche: delete(row, p)).grid(row=15 + 2 * i, column=7, columnspan=3, sticky="e", padx=(0, 20))
+        if i != display_count - 1:
+            CTkProgressBar(root, height=1, width=1040, fg_color="#E6E6E6", progress_color="#E6E6E6", border_width=0).grid(row=16 + 2 * i, column=1, columnspan=10)
+    
+    if num_liste_affiche > 1:
+        CTkButton(root, bg_color="white", fg_color="white", text="", image=Image_Previous_Page, width=15, height=15, hover_color="#BAC8EB", command=Previous_Page).grid(row=13, column=8)
+    if num_liste_affiche < num_liste_max:
+        CTkButton(root, bg_color="white", fg_color="white", text="", image=Image_Next_Page, width=15, height=15, hover_color="#BAC8EB", command=Next_Page).grid(row=13, column=9, sticky="w")
+
+def update_page_view(items, render_func):
+    global Liste_Affiche, num_liste_affiche, num_liste_max
+    num_liste_max = max(1, (len(items) + 9) // 10)
+    if num_liste_affiche < 1:
+        num_liste_affiche = 1
+    elif num_liste_affiche > num_liste_max:
+        num_liste_affiche = num_liste_max
+    
+    start_idx = (num_liste_affiche - 1) * 10
+    end_idx = min(start_idx + 10, len(items))
+    Liste_Affiche = items[start_idx:end_idx]
+    
+    clear_frame()
+    affichage_menu()
+    render_func()
+
+def Previous_Page():
+    global num_liste_affiche
+    if num_liste_affiche > 1:
+        num_liste_affiche -= 1
+        refresh_current_tab()
+
+def Next_Page():
+    global num_liste_affiche, num_liste_max
+    if num_liste_affiche < num_liste_max:
+        num_liste_affiche += 1
+        refresh_current_tab()
+
+def refresh_current_tab():
+    if page == "adherent":
+        update_page_view(Liste_Adherent, affichage_liste_adherent)
+    elif page == "livre":
+        update_page_view(Liste_Livre, affichage_liste_livre)
+    elif page in ("emprunt", "retard"):
+        update_page_view(Liste_Emprunt, affichage_liste_emprunts)
+
+def ChangementAdherent():
+    global page, Liste_Adherent, num_liste_affiche
+    page = "adherent"
+    Liste_Adherent = db.fetchall("SELECT * FROM adherent")
+    num_liste_affiche = 1
+    update_page_view(Liste_Adherent, affichage_liste_adherent)
+
+def ChangementLivre():
+    global page, Liste_Livre, num_liste_affiche
+    page = "livre"
+    Liste_Livre = db.fetchall("SELECT * FROM livre")
+    num_liste_affiche = 1
+    update_page_view(Liste_Livre, affichage_liste_livre)
+
+def ChangementEmprunts():
+    global page, Liste_Emprunt, num_liste_affiche
+    page = "emprunt"
+    Liste_Emprunt = db.fetchall("SELECT * FROM emprunt")
+    num_liste_affiche = 1
+    update_page_view(Liste_Emprunt, affichage_liste_emprunts)
+
+def delete(row, page_affiche):
+    global num_liste_affiche, Liste_Adherent, Liste_Livre, Liste_Emprunt
+    idx = (page_affiche - 1) * 10 + row
+    if page == "adherent" and idx < len(Liste_Adherent):
+        identifiant = Liste_Adherent[idx][0]
+        db.execute("DELETE FROM adherent WHERE identifiant=?", (identifiant,))
+        db.commit()
+        Liste_Adherent.pop(idx)
+        update_page_view(Liste_Adherent, affichage_liste_adherent)
+    elif page == "livre" and idx < len(Liste_Livre):
+        idlivre = Liste_Livre[idx][4]
+        db.execute("DELETE FROM livre WHERE idlivre=?", (idlivre,))
+        db.commit()
+        Liste_Livre.pop(idx)
+        update_page_view(Liste_Livre, affichage_liste_livre)
+    elif page in ("emprunt", "retard") and idx < len(Liste_Emprunt):
+        num_livre = Liste_Emprunt[idx][0]
+        identifiant = Liste_Emprunt[idx][5]
+        db.execute("DELETE FROM emprunt WHERE NumLivre=? AND Identifiant=?", (num_livre, identifiant))
+        db.commit()
+        Liste_Emprunt.pop(idx)
+        update_page_view(Liste_Emprunt, affichage_liste_emprunts)
+
+def sortby(column, table):
+    global Liste_Livre, Liste_Adherent, Liste_Emprunt, num_liste_affiche
+    num_liste_affiche = 1
+    if table == "livre":
+        Liste_Livre = db.fetchall(f"SELECT * FROM livre ORDER BY {column} COLLATE NOCASE ASC")
+        update_page_view(Liste_Livre, affichage_liste_livre)
+    elif table == "adherent":
+        Liste_Adherent = db.fetchall(f"SELECT * FROM adherent ORDER BY {column} COLLATE NOCASE ASC")
+        update_page_view(Liste_Adherent, affichage_liste_adherent)
+    elif table == "retard":
+        Liste_Emprunt = db.fetchall(f"SELECT * FROM emprunt WHERE DATE(DateRetour) < CURRENT_DATE ORDER BY {column} COLLATE NOCASE ASC")
+        update_page_view(Liste_Emprunt, affichage_liste_emprunts)
+    else:
+        Liste_Emprunt = db.fetchall(f"SELECT * FROM emprunt ORDER BY {column} COLLATE NOCASE ASC")
+        update_page_view(Liste_Emprunt, affichage_liste_emprunts)
+
+def Ajouter_Livre():
+    categorie = EntryCategorie.get().strip() if EntryCategorie else ""
+    isbn = EntryScanLivre.get().strip() if EntryScanLivre else ""
+    try:
+        book = meta(isbn) if isbn else None
+    except Exception:
+        book = None
+    
+    if book:
+        authors = book.get("Authors", [])
+        auteur = Edit_Nb_Auteur(str(authors)[2:-2]) if authors else ""
+        titre = str(book.get("Title", ""))
+        editeur = Edit_Nb_Auteur(str(book.get("Publisher", "")))
+    else:
+        auteur = ""
+        titre = ""
+        editeur = ""
+    affichage_confirmation_livre(titre, auteur, categorie, editeur, isbn)
+
+def Ajouter_Adherent():
+    nom = EntryNom.get().strip() if EntryNom else ""
+    prenom = EntryPrenom.get().strip() if EntryPrenom else ""
+    mail = EntryMail.get().strip() if EntryMail else ""
+    telephone = EntryTelephone.get().strip() if EntryTelephone else ""
+    affichage_confirmation_adherent(nom, prenom, mail, telephone)
+
+def Emprunt():
+    global Liste_Emprunt
+    id_livre_input = EntryScanEmprunt.get().strip() if EntryScanEmprunt else ""
+    id_adh_input = EntryAdherentCarte.get().strip() if EntryAdherentCarte else ""
+    if not id_livre_input or not id_adh_input:
+        return
+    
+    data_livre = db.fetchone("SELECT * FROM livre WHERE isbn=? OR CAST(idlivre AS TEXT)=?", (id_livre_input, id_livre_input))
+    data_adherent = db.fetchone("SELECT * FROM adherent WHERE CAST(identifiant AS TEXT)=?", (id_adh_input,))
+    
+    if not data_livre or not data_adherent:
+        return
+    
+    num_livre = str(data_livre[4])
+    nom_livre = str(data_livre[1])
+    date_emp = str(today_date)
+    date_ret = str(today_date + td)
+    id_adh = data_adherent[0]
+    nom_adh = str(data_adherent[1])
+    prenom_adh = str(data_adherent[2])
+    auteurs = str(data_livre[2])
+    
+    try:
+        db.execute("INSERT INTO emprunt(NumLivre, NomLivre, DateEmprunt, DateRetour, Identifiant, NomAdherent, PrenomAdherent, Auteur) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                   (num_livre, nom_livre, date_emp, date_ret, id_adh, nom_adh, prenom_adh, auteurs))
+        db.commit()
+    except Exception as e:
+        print(f"Erreur lors de l'emprunt: {e}")
+    
+    Liste_Emprunt = db.fetchall("SELECT * FROM emprunt")
+    update_page_view(Liste_Emprunt, affichage_liste_emprunts)
+
+def Retour():
+    global Liste_Emprunt
+    id_livre_input = EntryScanEmprunt.get().strip() if EntryScanEmprunt else ""
+    id_adh_input = EntryAdherentCarte.get().strip() if EntryAdherentCarte else ""
+    if not id_livre_input or not id_adh_input:
+        return
+    
+    data_livre = db.fetchone("SELECT * FROM livre WHERE isbn=? OR CAST(idlivre AS TEXT)=?", (id_livre_input, id_livre_input))
+    if not data_livre:
+        return
+    
+    num_livre = str(data_livre[4])
+    db.execute("DELETE FROM emprunt WHERE NumLivre=? AND CAST(Identifiant AS TEXT)=?", (num_livre, id_adh_input))
+    db.commit()
+    
+    Liste_Emprunt = db.fetchall("SELECT * FROM emprunt")
+    update_page_view(Liste_Emprunt, affichage_liste_emprunts)
+
+def RechercherAdherent():
+    global Liste_Adherent
+    term = EntryRechercheAdherent.get().strip() if EntryRechercheAdherent else ""
+    param = f"%{term}%"
+    res = db.fetchall("SELECT * FROM adherent WHERE nomAdherent LIKE ? OR prenomAdherent LIKE ? OR Mail LIKE ? OR telephone LIKE ? OR CAST(identifiant AS TEXT) LIKE ?",
+                      (param, param, param, param, param))
+    Liste_Adherent = res if res else []
+    update_page_view(Liste_Adherent, affichage_liste_adherent)
+
+def RechercherLivre():
+    global Liste_Livre
+    term = EntryRechercheLivre.get().strip() if EntryRechercheLivre else ""
+    param = f"%{term}%"
+    res = db.fetchall("SELECT * FROM livre WHERE isbn LIKE ? OR titre LIKE ? OR auteur LIKE ? OR CAST(idlivre AS TEXT) LIKE ? OR editeur LIKE ? OR categorie LIKE ?",
+                      (param, param, param, param, param, param))
+    Liste_Livre = res if res else []
+    update_page_view(Liste_Livre, affichage_liste_livre)
+
+def RechercherEmprunt():
+    global Liste_Emprunt
+    term = EntryRechercheEmprunt.get().strip() if EntryRechercheEmprunt else ""
+    param = f"%{term}%"
+    if page == "retard":
+        res = db.fetchall("SELECT * FROM emprunt WHERE DATE(DateRetour) < CURRENT_DATE AND (NomLivre LIKE ? OR Auteur LIKE ? OR NomAdherent LIKE ? OR PrenomAdherent LIKE ? OR DateRetour LIKE ?)",
+                          (param, param, param, param, param))
+    else:
+        res = db.fetchall("SELECT * FROM emprunt WHERE NomLivre LIKE ? OR Auteur LIKE ? OR NomAdherent LIKE ? OR PrenomAdherent LIKE ? OR DateRetour LIKE ?",
+                          (param, param, param, param, param))
+    Liste_Emprunt = res if res else []
+    update_page_view(Liste_Emprunt, affichage_liste_emprunts)
+
+def Retard():
+    global page, Liste_Emprunt
+    if page == "emprunt":
+        page = "retard"
+        Liste_Emprunt = db.fetchall("SELECT * FROM emprunt WHERE DATE(DateRetour) < CURRENT_DATE")
+    else:
+        page = "emprunt"
+        Liste_Emprunt = db.fetchall("SELECT * FROM emprunt")
+    update_page_view(Liste_Emprunt, affichage_liste_emprunts)
+
+def annuler():
+    global root_annexe
+    if root_annexe:
+        root_annexe.destroy()
+        root_annexe = None
+
+def addlivre(isbn, titre, auteur, editeur, categorie):
+    global root_annexe
+    if EntryISBN_Pop and EntryISBN_Pop.get().strip():
+        isbn = EntryISBN_Pop.get().strip()
+    if EntryTitre_Pop and EntryTitre_Pop.get().strip():
+        titre = EntryTitre_Pop.get().strip()
+    if EntryAuteur_Pop and EntryAuteur_Pop.get().strip():
+        auteur = EntryAuteur_Pop.get().strip()
+    if EntryEditeur_Pop and EntryEditeur_Pop.get().strip():
+        editeur = EntryEditeur_Pop.get().strip()
+    if EntryCategorie_Pop and EntryCategorie_Pop.get().strip():
+        categorie = EntryCategorie_Pop.get().strip()
+    
+    db.execute("INSERT INTO livre(isbn, titre, auteur, editeur, categorie) VALUES (?, ?, ?, ?, ?)",
+               (str(isbn), str(titre), str(auteur), str(editeur), str(categorie)))
+    db.commit()
+    annuler()
+    ChangementLivre()
+
+def addadherent(nom, prenom, mail, telephone):
+    global root_annexe
+    if EntryNom_Pop and EntryNom_Pop.get().strip():
+        nom = EntryNom_Pop.get().strip()
+    if EntryPrenom_Pop and EntryPrenom_Pop.get().strip():
+        prenom = EntryPrenom_Pop.get().strip()
+    if EntryMail_Pop and EntryMail_Pop.get().strip():
+        mail = EntryMail_Pop.get().strip()
+    if EntryTel_Pop and EntryTel_Pop.get().strip():
+        telephone = EntryTel_Pop.get().strip()
+    
+    db.execute("INSERT INTO adherent(nomAdherent, prenomAdherent, Mail, telephone) VALUES (?, ?, ?, ?)",
+               (str(nom), str(prenom), str(mail), str(telephone)))
+    db.commit()
+    annuler()
+    ChangementAdherent()
+
+# --- Modal Dialogs ---
+def affichage_confirmation_livre(titre, auteur, categorie, editeur, isbn):
+    global root_annexe, EntryISBN_Pop, EntryTitre_Pop, EntryAuteur_Pop, EntryEditeur_Pop, EntryCategorie_Pop
+    annuler()
+    
+    root_annexe = CTkToplevel(root)
+    root_annexe.geometry("440x500")
+    root_annexe.title("Confirmation d'ajout - Livre")
+    root_annexe.configure(fg_color="#0A1437")
+    root_annexe.resizable(False, False)
+    root_annexe.attributes("-topmost", True)
+    
+    CTkLabel(root_annexe, text="", corner_radius=10, height=20, width=10, font=Outfit, fg_color="#0A1437").grid(row=0, column=0)
+    CTkLabel(root_annexe, text="", corner_radius=10, height=450, width=400, font=Outfit, text_color="#1C1C1E", fg_color="white").grid(row=1, rowspan=15, column=1, columnspan=4, sticky="n")
+    CTkLabel(root_annexe, text="Confirmation d'ajout", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold).grid(row=1, column=1, sticky="sw", padx=(20, 0), pady=(10, 20))
+    
+    CTkLabel(root_annexe, text="Titre", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, height=20).grid(row=2, column=1, sticky="sw", padx=(20, 0))
+    EntryTitre_Pop = CTkEntry(root_annexe, placeholder_text="Titre", placeholder_text_color="#7882A5", width=350, corner_radius=10, height=40, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryTitre_Pop.grid(row=3, column=1, sticky="nw", padx=(20, 0))
+    if titre:
+        EntryTitre_Pop.insert(0, titre)
+    
+    CTkLabel(root_annexe, text="Auteur", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, height=20).grid(row=4, column=1, sticky="sw", padx=(20, 0))
+    EntryAuteur_Pop = CTkEntry(root_annexe, placeholder_text="Auteur", placeholder_text_color="#7882A5", width=350, corner_radius=10, height=40, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryAuteur_Pop.grid(row=5, column=1, sticky="nw", padx=(20, 0))
+    if auteur:
+        EntryAuteur_Pop.insert(0, auteur)
+    
+    CTkLabel(root_annexe, text="Categorie", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, height=20).grid(row=6, column=1, sticky="sw", padx=(20, 0))
+    EntryCategorie_Pop = CTkEntry(root_annexe, placeholder_text="Categorie", placeholder_text_color="#7882A5", width=350, corner_radius=10, height=40, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryCategorie_Pop.grid(row=7, column=1, sticky="nw", padx=(20, 0))
+    if categorie:
+        EntryCategorie_Pop.insert(0, categorie)
+    
+    CTkLabel(root_annexe, text="Editeur", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, height=20).grid(row=8, column=1, sticky="sw", padx=(20, 0))
+    EntryEditeur_Pop = CTkEntry(root_annexe, placeholder_text="Editeur", placeholder_text_color="#7882A5", width=350, corner_radius=10, height=40, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryEditeur_Pop.grid(row=9, column=1, sticky="nw", padx=(20, 0))
+    if editeur:
+        EntryEditeur_Pop.insert(0, editeur)
+    
+    CTkLabel(root_annexe, text="ISBN", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, height=20).grid(row=10, column=1, sticky="sw", padx=(20, 0))
+    EntryISBN_Pop = CTkEntry(root_annexe, placeholder_text="ISBN", placeholder_text_color="#7882A5", width=350, corner_radius=10, height=40, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryISBN_Pop.grid(row=11, column=1, sticky="nw", padx=(20, 0))
+    if isbn:
+        EntryISBN_Pop.insert(0, isbn)
+    
+    CTkLabel(root_annexe, text="", text_color="#1C1C1E", fg_color="#1C1C1E", bg_color="#1C1C1E").grid(row=12, column=0)
+    CTkButton(root_annexe, text="ANNULER", corner_radius=20, height=50, width=87, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", bg_color="white", hover=False, command=annuler).grid(row=14, column=1, columnspan=2, sticky="w", padx=(10, 0), pady=(0, 10))
+    CTkButton(root_annexe, text="AJOUTER", corner_radius=20, height=50, width=87, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", bg_color="white", hover=False, command=lambda: addlivre(isbn, titre, auteur, editeur, categorie)).grid(row=14, column=1, columnspan=4, sticky="e", padx=(0, 10), pady=(0, 10))
+
+def affichage_confirmation_adherent(nom, prenom, mail, telephone):
+    global root_annexe, EntryNom_Pop, EntryPrenom_Pop, EntryMail_Pop, EntryTel_Pop
+    annuler()
+    
+    root_annexe = CTkToplevel(root)
+    root_annexe.geometry("440x500")
+    root_annexe.title("Confirmation d'ajout - Adherent")
+    root_annexe.configure(fg_color="#0A1437")
+    root_annexe.resizable(False, False)
+    root_annexe.attributes("-topmost", True)
+    
+    CTkLabel(root_annexe, text="", corner_radius=10, height=20, width=10, font=Outfit, fg_color="#0A1437").grid(row=0, column=0)
+    CTkLabel(root_annexe, text="", corner_radius=10, height=450, width=400, font=Outfit, text_color="#1C1C1E", fg_color="white").grid(row=1, rowspan=15, column=1, columnspan=4, sticky="n")
+    CTkLabel(root_annexe, text="Confirmation d'ajout", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold).grid(row=1, column=1, sticky="sw", padx=(20, 0), pady=(10, 20))
+    
+    CTkLabel(root_annexe, text="Nom", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, height=20).grid(row=2, column=1, sticky="sw", padx=(20, 0))
+    EntryNom_Pop = CTkEntry(root_annexe, placeholder_text="Nom", placeholder_text_color="#7882A5", width=350, corner_radius=10, height=40, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryNom_Pop.grid(row=3, column=1, sticky="nw", padx=(20, 0))
+    if nom:
+        EntryNom_Pop.insert(0, nom)
+    
+    CTkLabel(root_annexe, text="Prenom", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, height=20).grid(row=4, column=1, sticky="sw", padx=(20, 0))
+    EntryPrenom_Pop = CTkEntry(root_annexe, placeholder_text="Prenom", placeholder_text_color="#7882A5", width=350, corner_radius=10, height=40, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryPrenom_Pop.grid(row=5, column=1, sticky="nw", padx=(20, 0))
+    if prenom:
+        EntryPrenom_Pop.insert(0, prenom)
+    
+    CTkLabel(root_annexe, text="Mail", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, height=20).grid(row=6, column=1, sticky="sw", padx=(20, 0))
+    EntryMail_Pop = CTkEntry(root_annexe, placeholder_text="Mail", placeholder_text_color="#7882A5", width=350, corner_radius=10, height=40, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryMail_Pop.grid(row=7, column=1, sticky="nw", padx=(20, 0))
+    if mail:
+        EntryMail_Pop.insert(0, mail)
+    
+    CTkLabel(root_annexe, text="Telephone", text_color="#1C1C1E", fg_color="white", bg_color="white", font=OutfitBold, height=20).grid(row=8, column=1, sticky="sw", padx=(20, 0))
+    EntryTel_Pop = CTkEntry(root_annexe, placeholder_text="Telephone", placeholder_text_color="#7882A5", width=350, corner_radius=10, height=40, font=Outfit, text_color="#1C1C1E", fg_color="#E5EAF8", bg_color="white", border_width=0)
+    EntryTel_Pop.grid(row=9, column=1, sticky="nw", padx=(20, 0))
+    if telephone:
+        EntryTel_Pop.insert(0, telephone)
+    
+    CTkLabel(root_annexe, text="", text_color="#1C1C1E", fg_color="#1C1C1E", bg_color="#1C1C1E").grid(row=12, column=0)
+    CTkButton(root_annexe, text="ANNULER", corner_radius=20, height=40, width=87, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", bg_color="white", hover=False, command=annuler).grid(row=14, column=1, columnspan=2, sticky="w", padx=(20, 0), pady=(0, 10))
+    CTkButton(root_annexe, text="AJOUTER", corner_radius=20, height=40, width=87, font=Outfit, text_color="#1C1C1E", fg_color="#BAC8EB", bg_color="white", hover=False, command=lambda: addadherent(nom, prenom, mail, telephone)).grid(row=14, column=1, columnspan=4, sticky="e", padx=(0, 10), pady=(0, 10))
+
 def Quitter():
-    connexion.commit()
-    connexion.close()
-    exit()
-ChangementLivre()
-root.mainloop()
+    db.close()
+    root.destroy()
+    sys.exit(0)
+
+if __name__ == "__main__":
+    ChangementLivre()
+    root.mainloop()
